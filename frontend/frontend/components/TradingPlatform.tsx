@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { BarChart3, ChevronDown, Clock, BookOpen, ArrowUpDown } from 'lucide-react';
 
 const TradingPlatform = () => {
-  const [orderType, setOrderType] = useState('limit');
-  const [selectedPair, setSelectedPair] = useState('ETH-USDT');
+  // const [orderType, setOrderType] = useState('limit');
+  // const [selectedPair, setSelectedPair] = useState('ETH-USDT');
 
   // サンプルデータ
   const orderBookData = {
@@ -36,7 +36,7 @@ const TradingPlatform = () => {
         <div className="flex items-center space-x-4">
           <span className="text-xl font-bold text-blue-600">RiseX</span>
           <div className="flex items-center px-3 py-1 bg-gray-100 rounded cursor-pointer">
-            <span className="mr-2">{selectedPair}</span>
+            <span className="mr-2">hogehoge</span>
             <ChevronDown size={16} />
           </div>
           <span className="text-green-500 font-semibold">2150.30 USDT</span>
@@ -64,8 +64,8 @@ const TradingPlatform = () => {
           
           {/* 売り注文 */}
           <div className="space-y-1 mb-4">
-            {orderBookData.asks.map((ask, i) => (
-              <div key={i} className="flex text-sm justify-between">
+            {orderBookData.asks.map((ask) => (
+              <div key={ask.price} className="flex text-sm justify-between">
                 <span className="text-red-500">{ask.price}</span>
                 <span>{ask.size}</span>
                 <span className="text-gray-500">{ask.total}</span>
@@ -81,8 +81,8 @@ const TradingPlatform = () => {
 
           {/* 買い注文 */}
           <div className="space-y-1 mt-4">
-            {orderBookData.bids.map((bid, i) => (
-              <div key={i} className="flex text-sm justify-between">
+            {orderBookData.bids.map((bid) => (
+              <div key={bid.price} className="flex text-sm justify-between">
                 <span className="text-green-500">{bid.price}</span>
                 <span>{bid.size}</span>
                 <span className="text-gray-500">{bid.total}</span>
@@ -112,12 +112,12 @@ const TradingPlatform = () => {
 
               <TabsContent value="limit" className="space-y-4">
                 <div className="space-y-2">
-                  <label className="block text-sm text-gray-600">Price</label>
-                  <Input placeholder="0.00" />
+                  <label htmlFor="price-input" className="block text-sm text-gray-600">Price</label>
+                  <Input id="price-input" placeholder="0.00" />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm text-gray-600">Amount</label>
-                  <Input placeholder="0.00" />
+                  <label htmlFor="amount-input" className="block text-sm text-gray-600">Amount</label>
+                  <Input id="amount-input" placeholder="0.00" />
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   <Button size="sm" variant="ghost" className="text-xs">25%</Button>
@@ -142,8 +142,8 @@ const TradingPlatform = () => {
               </h3>
             </div>
             <div className="space-y-2">
-              {recentTrades.map((trade, i) => (
-                <div key={i} className="flex text-sm justify-between">
+              {recentTrades.map((trade) => (
+                <div key={trade.price} className="flex text-sm justify-between">
                   <span className="text-gray-500">{trade.time}</span>
                   <span className={trade.side === 'buy' ? 'text-green-500' : 'text-red-500'}>
                     {trade.price}
