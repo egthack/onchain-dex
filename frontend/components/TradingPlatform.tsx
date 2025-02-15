@@ -9,7 +9,7 @@ const TradingPlatform = () => {
   // const [orderType, setOrderType] = useState('limit');
   // const [selectedPair, setSelectedPair] = useState('ETH-USDT');
 
-  // サンプルデータ
+  // sample data
   const orderBookData = {
     asks: [
       { price: '2150.50', size: '1.2345', total: '2654.99' },
@@ -31,7 +31,7 @@ const TradingPlatform = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
-      {/* ナビゲーションヘッダー */}
+      {/* navigation header */}
       <div className="flex items-center justify-between p-4 bg-white border-b">
         <div className="flex items-center space-x-4">
           <span className="text-xl font-bold text-blue-600">RiseX</span>
@@ -50,9 +50,8 @@ const TradingPlatform = () => {
         </div>
       </div>
 
-      {/* メインコンテンツ */}
+      {/* main content */}
       <div className="flex flex-1 p-4 space-x-4">
-        {/* 左サイドバー - 注文書 */}
         <Card className="w-1/4 p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold flex items-center">
@@ -62,7 +61,7 @@ const TradingPlatform = () => {
             <span className="text-xs text-gray-500">Depth: 0.1</span>
           </div>
           
-          {/* 売り注文 */}
+          {/* sell order */}
           <div className="space-y-1 mb-4">
             {orderBookData.asks.map((ask) => (
               <div key={ask.price} className="flex text-sm justify-between">
@@ -73,13 +72,13 @@ const TradingPlatform = () => {
             ))}
           </div>
 
-          {/* 現在価格 */}
+          {/* Current Price */}
           <div className="flex justify-between py-2 border-y border-gray-200">
             <span className="font-semibold">2150.30</span>
             <span className="text-gray-500">$2150.30</span>
           </div>
 
-          {/* 買い注文 */}
+          {/* Buy Orders */}
           <div className="space-y-1 mt-4">
             {orderBookData.bids.map((bid) => (
               <div key={bid.price} className="flex text-sm justify-between">
@@ -91,7 +90,7 @@ const TradingPlatform = () => {
           </div>
         </Card>
 
-        {/* チャート領域 */}
+        {/* Chart Area */}
         <Card className="flex-1 p-4">
           <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-200 rounded">
             <BarChart3 size={48} className="text-gray-400" />
@@ -99,9 +98,9 @@ const TradingPlatform = () => {
           </div>
         </Card>
 
-        {/* 右サイドバー - 注文フォームと取引履歴 */}
+        {/* Right Sidebar - Order Form and Trade History */}
         <div className="w-1/4 space-y-4">
-          {/* 注文フォーム */}
+          {/* Order Form */}
           <Card className="p-4">
             <Tabs defaultValue="limit">
               <TabsList className="w-full mb-4">
@@ -133,7 +132,7 @@ const TradingPlatform = () => {
             </Tabs>
           </Card>
 
-          {/* 取引履歴 */}
+          {/* Trade History */}
           <Card className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold flex items-center">
