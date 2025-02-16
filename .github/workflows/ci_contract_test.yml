@@ -49,4 +49,4 @@ jobs:
         run: pip install slither-analyzer
 
       - name: Run Slither Analysis
-        run: slither .
+        run: slither ./web3/contracts
