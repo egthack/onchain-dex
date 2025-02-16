@@ -1,17 +1,18 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.17;
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IDex.sol";
 import "./library/VaultLib.sol";
 
 contract TradingVault is IVault {
-    // ユーザー -> (トークン -> 残高)
+    // Mapping from user address to (token address => balance)
     mapping(address => mapping(address => uint256)) public balances;
 
-    // user -> (trader -> TraderApproval)
+    // Mapping from user address to (trader address => TraderApproval)
     mapping(address => mapping(address => TraderApproval))
         public traderApprovals;
 
-    // 任意のOn-chain DEXアドレスを保持 (例: Uniswap, Sushiswap,等)
-    // 必要に応じて複数のDEXを管理する仕組みもあり得る
     IDex public dex;
 
     constructor(address _dex) {
@@ -19,17 +20,17 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice ユーザーがVaultにトークンをデポジット
+     * @notice Deposits tokens into the Vault.
      */
     function deposit(address token, uint256 amount) external override {
         require(amount > 0, "Amount must be > 0");
-        // ユーザーのウォレットからこのコントラクトへトークン転送
+        // Transfers tokens from the user's wallet to this contract.
         IERC20(token).transferFrom(msg.sender, address(this), amount);
         balances[msg.sender][token] += amount;
     }
 
     /**
-     * @notice ユーザーがVaultからトークンを引き出し
+     * @notice Withdraws tokens from the Vault.
      */
     function withdraw(address token, uint256 amount) external override {
         require(balances[msg.sender][token] >= amount, "Insufficient balance");
@@ -38,7 +39,7 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice Botやユーザーなど「代理執行者」の承認設定
+     * @notice Sets the approval for bots or delegated traders.
      */
     function setTraderApproval(
         address trader,
@@ -54,7 +55,7 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice ユーザーのトークン残高を取得
+     * @notice Retrieves the token balance for a user.
      */
     function getBalance(
         address user,
@@ -64,8 +65,8 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice バッチで複数取引を実行
-     * gas最適化 & Botによる自動執行を想定
+     * @notice Executes multiple trades in a batch.
+     * Designed for gas optimization and automated execution by bots.
      */
     function executeTradeBatch(
         TradeRequest[] calldata trades
@@ -76,27 +77,27 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @dev バッチ内部で呼ばれる個別取引実行関数
+     * @dev Executes an individual trade within the batch.
      */
     function _executeSingleTrade(TradeRequest calldata req) internal {
-        // ライブラリで承認チェック
+        // Authorization check using the library.
         VaultLib.checkTradeRequest(req, traderApprovals);
 
-        // 残高チェック
+        // Balance check.
         require(
             balances[req.user][req.tokenIn] >= req.amountIn,
             "Insufficient vault balance"
         );
 
-        // Vault内資産をDEXにデポジット → swap → Vaultに戻す例
-        // (DEXによってはtransferFromで直接swapできる場合もある)
+        // Example: Deposit assets from Vault to DEX, perform a swap, and return assets to Vault.
+        // (Some DEX implementations might support direct swaps via transferFrom)
         balances[req.user][req.tokenIn] -= req.amountIn;
 
-        // 1) Vault -> Dex deposit
+        // Step 1: Vault -> DEX deposit
         IERC20(req.tokenIn).approve(address(dex), req.amountIn);
         dex.deposit(req.tokenIn, req.amountIn);
 
-        // 2) swap
+        // Step 2: Execute swap
         uint256 outAmount = dex.swap(
             req.tokenIn,
             req.tokenOut,
@@ -104,10 +105,10 @@ contract TradingVault is IVault {
             req.minAmountOut
         );
 
-        // 3) Dex -> Vault withdraw
+        // Step 3: DEX -> Vault withdrawal
         dex.withdraw(req.tokenOut, outAmount);
 
-        // 4) UserのVault残高に反映
+        // Step 4: Update the user's Vault balance
         balances[req.user][req.tokenOut] += outAmount;
     }
 }
