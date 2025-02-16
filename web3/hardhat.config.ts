@@ -10,6 +10,10 @@ const config: HardhatUserConfig = {
       url: process.env.SEPOLIA_URL,
       accounts: [process.env.PRIVATE_KEY ?? ""],
     },
+    riseSepolia: {
+      url: process.env.RISE_SEPOLIA_URL,
+      accounts: [process.env.PRIVATE_KEY ?? ""],
+    },
   },
 };
 
