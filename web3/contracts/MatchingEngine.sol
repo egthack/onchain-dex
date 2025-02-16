@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "./interfaces/IERC20.sol";
 import "./library/RedBlackTreeLib.sol";
+import "./interfaces/IMatchingEngine.sol";
 
 /**
  * @title MatchingEngine
@@ -13,11 +14,7 @@ import "./library/RedBlackTreeLib.sol";
 contract MatchingEngine {
     using RedBlackTreeLib for RedBlackTreeLib.Tree;
 
-    // Enum for order side.
-    enum OrderSide {
-        Buy,
-        Sell
-    }
+    // Using OrderSide enum from IMatchingEngine interface.
 
     // Order structure with token pair info.
     struct Order {
@@ -27,7 +24,7 @@ contract MatchingEngine {
         address tokenOut; // Token being bought
         uint256 price; // Price: tokenOut per tokenIn (multiplier)
         uint256 amount; // Remaining order amount
-        OrderSide side;
+        IMatchingEngine.OrderSide side;
         uint256 timestamp;
         bool active;
         uint256 next; // Linked list pointer for FIFO within same price level.
@@ -70,7 +67,7 @@ contract MatchingEngine {
     event OrderPlaced(
         uint256 indexed orderId,
         address indexed user,
-        OrderSide side,
+        IMatchingEngine.OrderSide side,
         address tokenIn,
         address tokenOut,
         uint256 price,
@@ -99,6 +96,8 @@ contract MatchingEngine {
         uint256[2] decimals,
         uint256 timestamp
     );
+    // New event for fee rate updates
+    event FeeRatesUpdated(uint256 makerFeeRate, uint256 takerFeeRate);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "Only admin");
@@ -166,7 +165,7 @@ contract MatchingEngine {
     function placeOrder(
         address tokenIn,
         address tokenOut,
-        OrderSide side,
+        IMatchingEngine.OrderSide side,
         uint256 price,
         uint256 amount
     ) external returns (uint256 orderId) {
@@ -189,7 +188,7 @@ contract MatchingEngine {
 
         bytes32 pairId = getPairId(tokenIn, tokenOut);
         OrderBook storage ob = orderBooks[pairId];
-        if (side == OrderSide.Buy) {
+        if (side == IMatchingEngine.OrderSide.Buy) {
             ob.buyOrdersAtPrice[price].push(orderId);
             if (!ob.buyTree.exists(price)) {
                 ob.buyTree.insert(price);
@@ -228,7 +227,7 @@ contract MatchingEngine {
         OrderBook storage ob = orderBooks[pairId];
         uint256 remaining = incoming.amount;
 
-        if (incoming.side == OrderSide.Buy) {
+        if (incoming.side == IMatchingEngine.OrderSide.Buy) {
             // Match buy order against sell orders with price <= incoming.price.
             uint256 bestSellPrice = ob.sellTree.getMin();
             while (
@@ -353,12 +352,12 @@ contract MatchingEngine {
      */
     function getOrders(
         bytes32 pairId,
-        OrderSide side,
+        IMatchingEngine.OrderSide side,
         uint256 count,
         uint256 startPrice
     ) external view returns (OrderResult[] memory orderResults) {
         OrderBook storage ob = orderBooks[pairId];
-        uint256[] storage orderIds = (side == OrderSide.Buy)
+        uint256[] storage orderIds = (side == IMatchingEngine.OrderSide.Buy)
             ? ob.buyOrdersAtPrice[startPrice]
             : ob.sellOrdersAtPrice[startPrice];
         orderResults = new OrderResult[](count);
@@ -392,8 +391,14 @@ contract MatchingEngine {
         require(i < pairKeys.length, "Index out of range");
         bytes32 pairId = pairKeys[i];
         Pair memory p = pairs[pairId];
-        BestOrderResult memory bestBuy = getBestOrder(pairId, OrderSide.Buy);
-        BestOrderResult memory bestSell = getBestOrder(pairId, OrderSide.Sell);
+        BestOrderResult memory bestBuy = getBestOrder(
+            pairId,
+            IMatchingEngine.OrderSide.Buy
+        );
+        BestOrderResult memory bestSell = getBestOrder(
+            pairId,
+            IMatchingEngine.OrderSide.Sell
+        );
         pairResult = PairResult({
             pairId: pairId,
             tokenz: [p.tokenz[0], p.tokenz[1]],
@@ -477,6 +482,7 @@ contract MatchingEngine {
     ) external onlyAdmin {
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
+        emit FeeRatesUpdated(_makerFeeRate, _takerFeeRate);
     }
 
     /**
@@ -501,12 +507,12 @@ contract MatchingEngine {
      */
     function getBestOrder(
         bytes32 pairId,
-        OrderSide side
+        IMatchingEngine.OrderSide side
     ) public view returns (BestOrderResult memory orderResult) {
         OrderBook storage ob = orderBooks[pairId];
         uint256 bestPrice;
         uint256[] storage ordersAtPrice;
-        if (side == OrderSide.Buy) {
+        if (side == IMatchingEngine.OrderSide.Buy) {
             bestPrice = ob.buyTree.getMax();
             ordersAtPrice = ob.buyOrdersAtPrice[bestPrice];
         } else {

@@ -22,6 +22,28 @@ contract TradingVault is IVault {
     // Matching engine contract instance
     IMatchingEngine public engine;
 
+    // Events for important operations
+    event Deposit(address indexed user, address indexed token, uint256 amount);
+    event Withdrawal(
+        address indexed user,
+        address indexed token,
+        uint256 amount
+    );
+    event TraderApprovalSet(
+        address indexed user,
+        address indexed trader,
+        bool approved,
+        uint256 maxOrderSize,
+        uint256 expiry
+    );
+    event TradeExecuted(
+        address indexed user,
+        address indexed tokenIn,
+        address indexed tokenOut,
+        uint256 amountIn,
+        uint256 outAmount
+    );
+
     constructor(address _engine) {
         engine = IMatchingEngine(_engine);
     }
@@ -33,6 +55,7 @@ contract TradingVault is IVault {
         require(amount > 0, "Amount must be > 0");
         IERC20(token).transferFrom(msg.sender, address(this), amount);
         balances[msg.sender][token] += amount;
+        emit Deposit(msg.sender, token, amount);
     }
 
     /**
@@ -42,6 +65,7 @@ contract TradingVault is IVault {
         require(balances[msg.sender][token] >= amount, "Insufficient balance");
         balances[msg.sender][token] -= amount;
         IERC20(token).transfer(msg.sender, amount);
+        emit Withdrawal(msg.sender, token, amount);
     }
 
     /**
@@ -58,6 +82,13 @@ contract TradingVault is IVault {
             maxOrderSize: maxOrderSize,
             expiry: expiry
         });
+        emit TraderApprovalSet(
+            msg.sender,
+            trader,
+            approved,
+            maxOrderSize,
+            expiry
+        );
     }
 
     /**
@@ -112,5 +143,12 @@ contract TradingVault is IVault {
 
         // Update user's Vault balance with tokenOut.
         balances[req.user][req.tokenOut] += outAmount;
+        emit TradeExecuted(
+            req.user,
+            req.tokenIn,
+            req.tokenOut,
+            req.amountIn,
+            outAmount
+        );
     }
 }
