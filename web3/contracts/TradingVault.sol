@@ -101,15 +101,11 @@ contract TradingVault is IVault {
         // Approve MatchingEngine to spend tokenIn.
         IERC20(req.tokenIn).approve(address(engine), req.amountIn);
 
-        // Determine order side:
-        // Example convention: if preApprovalId is non-zero, it's a Buy order; otherwise, Sell.
-        uint8 side = req.preApprovalId != 0 ? 0 : 1;
-
         // Call MatchingEngine to place the order.
         uint256 outAmount = engine.placeOrder(
             req.tokenIn,
             req.tokenOut,
-            side,
+            req.side,
             req.amountIn,
             req.minAmountOut
         );

@@ -59,7 +59,7 @@ describe("TradingVault", function () {
   describe("Deposit", function () {
     it("should allow depositing tokens", async function () {
       const { tokenContract, vaultContract, addr1 } = await deployFixture();
-      // addr1 によるトークン移動を可能にするため approve
+      // Approve token transfer for addr1
       await tokenContract
         .connect(addr1)
         .approve(vaultContract.getAddress(), 200);
@@ -154,7 +154,7 @@ describe("TradingVault", function () {
   describe("Trader Approval", function () {
     it("should allow setting trader approval", async function () {
       const { vaultContract, addr1, addr2 } = await deployFixture();
-      // addr1 が addr2 に対して承認設定（approved=true, maxOrderSize=100, expiry=9999）
+      // addr1 sets trader approval for addr2 (approved=true, maxOrderSize=100, expiry=9999)
       await vaultContract
         .connect(addr1)
         .setTraderApproval(await addr2.getAddress(), true, 100, 9999);
@@ -186,10 +186,10 @@ describe("TradingVault", function () {
         .connect(addr1)
         .setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
 
-      // 取引要求の作成（preApprovalId が非ゼロなら Buy 注文とする）
+      // Create trade request (if preApprovalId is nonzero, treat as a Buy order)
       const preApprovalId = ethers.encodeBytes32String("approved");
 
-      // VaultLib と同じ方法でメッセージハッシュを算出
+      // Compute the message hash using the same method as VaultLib
       const messageHash = ethers.solidityPackedKeccak256(
         ["address", "address", "address", "uint256", "uint256", "bytes32"],
         [
@@ -201,7 +201,7 @@ describe("TradingVault", function () {
           preApprovalId,
         ]
       );
-      // signMessage には arrayify する
+      // Arrayify the message hash for signMessage
       const signature = await addr1.signMessage(getBytes(messageHash));
 
       const tradeRequest = {
@@ -211,14 +211,14 @@ describe("TradingVault", function () {
         amountIn: 100,
         minAmountOut: 0,
         preApprovalId: preApprovalId,
+        side: 0, // 0: Buy, 1: Sell
         signature: signature,
       };
 
-      // executeTradeBatch を実行（内部で MatchingEngine.placeOrder が呼ばれる）
+      // Execute trade batch (internally calls MatchingEngine.placeOrder)
       await vaultContract.connect(addr2).executeTradeBatch([tradeRequest]);
 
-      // _executeSingleTrade 内で、balances[req.user][tokenIn] から 100 引かれ、engine.placeOrder の返り値 (orderId 0) が加算される。
-      // つまり、同一トークンの場合 final balance = 100 - 100  0 = 0 となるはず
+      // Inside _executeSingleTrade, subtract 100 from balances[req.user][tokenIn] and add the output from engine.placeOrder (orderId 0)
       const finalBalance = await vaultContract.getBalance(
         await addr1.getAddress(),
         tokenContract.getAddress()

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 library VaultLib {
     struct TradeRequest {
         address user; // The user executing the trade (asset owner)
+        uint8 side; // 0: Buy, 1: Sell
         address tokenIn; // The token being sold
         address tokenOut; // The token being bought
         uint256 amountIn; // Amount to sell

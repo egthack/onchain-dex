@@ -9,7 +9,7 @@ describe("MatchingEngine", function () {
   let addr1: Signer;
   let addr2: Signer;
 
-  // ダミーのトークンアドレスとして各サイナーのアドレスを利用
+  // Use each signer's address as a dummy token address
   let tokenA: string;
   let tokenB: string;
 
@@ -19,8 +19,8 @@ describe("MatchingEngine", function () {
     addr1 = signers[1];
     addr2 = signers[2];
 
-    tokenA = await admin.getAddress(); // ダミー tokenIn
-    tokenB = await addr1.getAddress(); // ダミー tokenOut
+    tokenA = await admin.getAddress(); // Dummy tokenIn
+    tokenB = await addr1.getAddress(); // Dummy tokenOut
 
     const MatchingEngineFactory = await ethers.getContractFactory(
       "MatchingEngine"
@@ -29,7 +29,7 @@ describe("MatchingEngine", function () {
     matchingEngine = await MatchingEngineFactory.deploy(10, 15);
     await matchingEngine.waitForDeployment();
 
-    // 管理者によって取引ペア(tokenA, tokenB)を追加（decimalsは18,18）
+    // Admin adds trading pair (tokenA, tokenB) with decimals 18, 18
     await matchingEngine.connect(admin).addPair(tokenA, tokenB, 18, 18);
   });
 
@@ -59,7 +59,7 @@ describe("MatchingEngine", function () {
 
   describe("Order Creation", function () {
     it("should create a buy order properly", async function () {
-      // Buy注文: OrderSide.Buy = 0, price 150, amount 50
+      // Buy order: OrderSide.Buy = 0, price 150, amount 50
       const tx = await matchingEngine
         .connect(addr1)
         .placeOrder(tokenA, tokenB, 0, 150, 50);
@@ -99,7 +99,7 @@ describe("MatchingEngine", function () {
     });
 
     it("should create a sell order properly", async function () {
-      // Sell注文: OrderSide.Sell = 1, price 100, amount 30
+      // Sell order: OrderSide.Sell = 1, price 100, amount 30
       const tx = await matchingEngine
         .connect(addr1)
         .placeOrder(tokenA, tokenB, 1, 100, 30);
@@ -141,7 +141,7 @@ describe("MatchingEngine", function () {
 
   describe("Order Best Retrieval", function () {
     it("should retrieve the best order for a given side", async function () {
-      // 2件のBuy注文を発注：1件目は価格150, 2件目は価格160
+      // Place two buy orders: first order with price 150, second order with price 160
       await matchingEngine
         .connect(addr1)
         .placeOrder(tokenA, tokenB, 0, 150, 50);
@@ -151,16 +151,16 @@ describe("MatchingEngine", function () {
 
       const pairId = await matchingEngine.getPairId(tokenA, tokenB);
       const bestBuy = await matchingEngine.getBestOrder(pairId, 0);
-      // Buy注文は最高値が最良となるので、2件目の注文（orderId = 1, price 160）が返るはず
+      // Buy order is the highest value, so the second order (orderId = 1, price 160) should be returned
       expect(bestBuy.orderId).to.equal(1);
       expect(bestBuy.price).to.equal(160);
 
-      // 2件のSell注文を発注：1件目が価格90, 2件目が価格80
+      // Place two sell orders: first order with price 90, second order with price 80
       await matchingEngine.connect(addr1).placeOrder(tokenA, tokenB, 1, 90, 40);
       await matchingEngine.connect(addr2).placeOrder(tokenA, tokenB, 1, 80, 20);
 
       const bestSell = await matchingEngine.getBestOrder(pairId, 1);
-      // Sell注文は最低値が最良となるので、2件目（orderId = 3, price 80）が返るはず
+      // Sell order is the lowest value, so the second order (orderId = 3, price 80) should be returned
       expect(bestSell.orderId).to.equal(3);
       expect(bestSell.price).to.equal(80);
     });
