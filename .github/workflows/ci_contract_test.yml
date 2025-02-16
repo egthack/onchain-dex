@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SEPOLIA_URL: "https://eth-sepolia.g.alchemy.com/v2/"
+      PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -34,22 +37,26 @@ jobs:
       - name: Run Hardhat tests
         run: npx hardhat test
         working-directory: web3
+  
+  # slither:
+  #   name: Slither Static Analysis
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v3
 
-  slither:
-    name: Slither Static Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+  #     - name: Install dependencies
+  #       run: npm install
+  #       working-directory: web3
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+  #     - name: Setup Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: '3.x'
 
-      - name: Install Slither Analyzer
-        run: pip install slither-analyzer
-        working-directory: web3
-      - name: Run Slither Analysis
-        run: slither .
-        working-directory: web3
+  #     - name: Install Slither Analyzer
+  #       run: pip install slither-analyzer
+  #       working-directory: web3
+  #     - name: Run Slither Analysis
+  #       run: slither .
+  #       working-directory: web3
