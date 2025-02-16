@@ -1,8 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { MockERC20, TradingVault } from "../typechain-types";
+import { MockERC20, TradingVault, MatchingEngine } from "../typechain-types";
 import { getBytes, Signer } from "ethers";
-import { TradeRequestStruct } from "../typechain-types/contracts/interfaces/IDex.sol/IVault";
 
 describe("TradingVault", function () {
   let owner: Signer;
@@ -10,13 +9,16 @@ describe("TradingVault", function () {
   let addr2: Signer;
   let tokenContract: MockERC20;
   let vaultContract: TradingVault;
+  let engineContract: MatchingEngine;
 
+  // Fixture: deploy mock token, MatchingEngine as engine, and TradingVault using engine address.
   const deployFixture = async () => {
-    const [deployer, user1, user2] = await ethers.getSigners();
-    owner = deployer;
-    addr1 = user1;
-    addr2 = user2;
+    const signers = await ethers.getSigners();
+    owner = signers[0];
+    addr1 = signers[1];
+    addr2 = signers[2];
 
+    // Deploy MockERC20
     const TokenFactory = await ethers.getContractFactory("MockERC20");
     tokenContract = await TokenFactory.connect(owner).deploy(
       "Mock Token",
@@ -24,19 +26,34 @@ describe("TradingVault", function () {
       1000000
     );
     await tokenContract.waitForDeployment();
+    // Transfer tokens to addr1
     await tokenContract.connect(owner).transfer(await addr1.getAddress(), 1000);
 
-    const DexFactory = await ethers.getContractFactory("DEX");
-    const dexContract = await DexFactory.connect(owner).deploy();
-    await dexContract.waitForDeployment();
+    // Deploy MatchingEngine as engine (makerFeeRate = 10, takerFeeRate = 15)
+    const EngineFactory = await ethers.getContractFactory("MatchingEngine");
+    engineContract = await EngineFactory.connect(owner).deploy(10, 15);
+    await engineContract.waitForDeployment();
+    // 管理者により、取引ペア(tokenIn, tokenOut) を追加
+    // ※ここでは便宜的に tokenContract.getAddress() を両方に採用
+    await engineContract
+      .connect(owner)
+      .addPair(tokenContract.getAddress(), tokenContract.getAddress(), 18, 18);
 
-    const TradingVaultFactory = await ethers.getContractFactory("TradingVault");
-    vaultContract = await TradingVaultFactory.connect(owner).deploy(
-      dexContract.getAddress()
+    // Deploy TradingVault with engine address
+    const VaultFactory = await ethers.getContractFactory("TradingVault");
+    vaultContract = await VaultFactory.connect(owner).deploy(
+      engineContract.getAddress()
     );
     await vaultContract.waitForDeployment();
 
-    return { owner, addr1, addr2, tokenContract, vaultContract };
+    return {
+      owner,
+      addr1,
+      addr2,
+      tokenContract,
+      vaultContract,
+      engineContract,
+    };
   };
 
   describe("Deposit", function () {
@@ -100,7 +117,7 @@ describe("TradingVault", function () {
         await addr1.getAddress(),
         tokenContract.getAddress()
       );
-      // withdrawing 0 tokens should work (or be a no-op) since no explicit check is present
+      // 0トークンの引き出しは問題なく動作する（no-op）
       await vaultContract
         .connect(addr1)
         .withdraw(tokenContract.getAddress(), 0);
@@ -137,26 +154,26 @@ describe("TradingVault", function () {
   describe("Trader Approval", function () {
     it("should allow setting trader approval", async function () {
       const { vaultContract, addr1, addr2 } = await deployFixture();
-      // addr1 sets approval for addr2; parameters example: approved = true, maxOrderSize = 100, expiry = 9999
+      // addr1 が addr2 に対して承認設定（approved=true, maxOrderSize=100, expiry=9999）
       await vaultContract
         .connect(addr1)
         .setTraderApproval(await addr2.getAddress(), true, 100, 9999);
-      const traderApproval = await vaultContract.traderApprovals(
+      const approval = await vaultContract.traderApprovals(
         await addr1.getAddress(),
         await addr2.getAddress()
       );
-      expect(traderApproval.approved).to.be.true;
-      expect(traderApproval.maxOrderSize).to.equal(100);
-      expect(traderApproval.expiry).to.equal(9999);
+      expect(approval.approved).to.be.true;
+      expect(approval.maxOrderSize).to.equal(100);
+      expect(approval.expiry).to.equal(9999);
     });
   });
 
   describe("Trade Request", function () {
-    it("should execute trading", async function () {
-      const { vaultContract, addr1, addr2, tokenContract } =
+    it("should execute a trade request", async function () {
+      const { vaultContract, tokenContract, addr1, addr2 } =
         await deployFixture();
 
-      // Deposit
+      // Deposit tokens by addr1
       await tokenContract
         .connect(addr1)
         .approve(vaultContract.getAddress(), 200);
@@ -164,47 +181,49 @@ describe("TradingVault", function () {
         .connect(addr1)
         .deposit(tokenContract.getAddress(), 100);
 
-      // Set trader approval: addr1 approves addr2 with sufficient quota and expiry
+      // addr1 が addr2 に対して、十分な注文可能額と有効期限で承認を設定
       await vaultContract
         .connect(addr1)
         .setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
 
-      // Use a non-zero preApprovalId
+      // 取引要求の作成（preApprovalId が非ゼロなら Buy 注文とする）
       const preApprovalId = ethers.encodeBytes32String("approved");
 
-      // generate message hash same as VaultLib (using the non-zero preApprovalId)
+      // VaultLib と同じ方法でメッセージハッシュを算出
       const messageHash = ethers.solidityPackedKeccak256(
         ["address", "address", "address", "uint256", "uint256", "bytes32"],
         [
           await addr1.getAddress(),
-          await tokenContract.getAddress(),
-          await tokenContract.getAddress(),
+          tokenContract.getAddress(),
+          tokenContract.getAddress(),
           100,
           0,
           preApprovalId,
         ]
       );
-
-      // signature should be generated by addr1
+      // signMessage には arrayify する
       const signature = await addr1.signMessage(getBytes(messageHash));
 
-      const tradeRequest: TradeRequestStruct = {
+      const tradeRequest = {
         user: await addr1.getAddress(),
         tokenIn: tokenContract.getAddress(),
         tokenOut: tokenContract.getAddress(),
         amountIn: 100,
         minAmountOut: 0,
         preApprovalId: preApprovalId,
-        signature,
+        signature: signature,
       };
-      // execute trade request
+
+      // executeTradeBatch を実行（内部で MatchingEngine.placeOrder が呼ばれる）
       await vaultContract.connect(addr2).executeTradeBatch([tradeRequest]);
-      // check balance after trade
-      const balance = await vaultContract.getBalance(
+
+      // _executeSingleTrade 内で、balances[req.user][tokenIn] から 100 引かれ、engine.placeOrder の返り値 (orderId 0) が加算される。
+      // つまり、同一トークンの場合 final balance = 100 - 100  0 = 0 となるはず
+      const finalBalance = await vaultContract.getBalance(
         await addr1.getAddress(),
         tokenContract.getAddress()
       );
-      expect(balance).to.equal(100);
+      expect(finalBalance).to.equal(0);
     });
   });
 });

@@ -1,11 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "../interfaces/IDex.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 library VaultLib {
-    using ECDSA for bytes32;
+    struct TradeRequest {
+        address user; // The user executing the trade (asset owner)
+        address tokenIn; // The token being sold
+        address tokenOut; // The token being bought
+        uint256 amountIn; // Amount to sell
+        uint256 minAmountOut; // Minimum amount to receive (slippage protection)
+        bytes32 preApprovalId; // Pre-approval ID (for signature verification, etc.)
+        bytes signature; // User's signature
+    }
+
+    struct TraderApproval {
+        bool approved; // Whether the trader is approved
+        uint256 maxOrderSize; // Maximum order size that the trader can execute at once
+        uint256 expiry; // Approval expiry timestamp
+    }
 
     /**
      * @notice TradeRequestの妥当性チェック

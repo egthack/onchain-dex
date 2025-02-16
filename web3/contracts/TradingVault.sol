@@ -2,21 +2,28 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./interfaces/IDex.sol";
+import "./interfaces/IVault.sol";
+import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
 
+/**
+ * @title TradingVault
+ * @dev Manages user balances and delegated trading approvals.
+ *      It allows deposits, withdrawals, and executing batched trades via an external MatchingEngine.
+ */
 contract TradingVault is IVault {
-    // Mapping from user address to (token address => balance)
+    // Mapping: user => (token => balance)
     mapping(address => mapping(address => uint256)) public balances;
 
-    // Mapping from user address to (trader address => TraderApproval)
-    mapping(address => mapping(address => TraderApproval))
+    // Mapping: user => (trader => TraderApproval)
+    mapping(address => mapping(address => VaultLib.TraderApproval))
         public traderApprovals;
 
-    IDex public dex;
+    // Matching engine contract instance
+    IMatchingEngine public engine;
 
-    constructor(address _dex) {
-        dex = IDex(_dex);
+    constructor(address _engine) {
+        engine = IMatchingEngine(_engine);
     }
 
     /**
@@ -24,7 +31,6 @@ contract TradingVault is IVault {
      */
     function deposit(address token, uint256 amount) external override {
         require(amount > 0, "Amount must be > 0");
-        // Transfers tokens from the user's wallet to this contract.
         IERC20(token).transferFrom(msg.sender, address(this), amount);
         balances[msg.sender][token] += amount;
     }
@@ -39,7 +45,7 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice Sets the approval for bots or delegated traders.
+     * @notice Sets approval for bots or delegated traders.
      */
     function setTraderApproval(
         address trader,
@@ -47,7 +53,7 @@ contract TradingVault is IVault {
         uint256 maxOrderSize,
         uint256 expiry
     ) external {
-        traderApprovals[msg.sender][trader] = TraderApproval({
+        traderApprovals[msg.sender][trader] = VaultLib.TraderApproval({
             approved: approved,
             maxOrderSize: maxOrderSize,
             expiry: expiry
@@ -55,7 +61,7 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice Retrieves the token balance for a user.
+     * @notice Retrieves the balance for a given user and token.
      */
     function getBalance(
         address user,
@@ -65,50 +71,50 @@ contract TradingVault is IVault {
     }
 
     /**
-     * @notice Executes multiple trades in a batch.
-     * Designed for gas optimization and automated execution by bots.
+     * @notice Executes a batch of trades via the MatchingEngine.
      */
     function executeTradeBatch(
-        TradeRequest[] calldata trades
-    ) external override {
+        VaultLib.TradeRequest[] calldata trades
+    ) external payable override {
         for (uint256 i = 0; i < trades.length; i++) {
             _executeSingleTrade(trades[i]);
         }
     }
 
     /**
-     * @dev Executes an individual trade within the batch.
+     * @dev Executes a single trade by interacting with the MatchingEngine.
+     *      Deducts tokenIn from the user's Vault balance, approves the MatchingEngine,
+     *      and then calls placeOrder on the MatchingEngine.
+     *      The MatchingEngine returns the output amount (tokenOut) after matching.
      */
-    function _executeSingleTrade(TradeRequest calldata req) internal {
-        // Authorization check using the library.
+    function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
+        // Check authorization using VaultLib.
         VaultLib.checkTradeRequest(req, traderApprovals);
-
-        // Balance check.
         require(
             balances[req.user][req.tokenIn] >= req.amountIn,
             "Insufficient vault balance"
         );
 
-        // Example: Deposit assets from Vault to DEX, perform a swap, and return assets to Vault.
-        // (Some DEX implementations might support direct swaps via transferFrom)
+        // Deduct funds from the Vault.
         balances[req.user][req.tokenIn] -= req.amountIn;
 
-        // Step 1: Vault -> DEX deposit
-        IERC20(req.tokenIn).approve(address(dex), req.amountIn);
-        dex.deposit(req.tokenIn, req.amountIn);
+        // Approve MatchingEngine to spend tokenIn.
+        IERC20(req.tokenIn).approve(address(engine), req.amountIn);
 
-        // Step 2: Execute swap
-        uint256 outAmount = dex.swap(
+        // Determine order side:
+        // Example convention: if preApprovalId is non-zero, it's a Buy order; otherwise, Sell.
+        uint8 side = req.preApprovalId != 0 ? 0 : 1;
+
+        // Call MatchingEngine to place the order.
+        uint256 outAmount = engine.placeOrder(
             req.tokenIn,
             req.tokenOut,
+            side,
             req.amountIn,
             req.minAmountOut
         );
 
-        // Step 3: DEX -> Vault withdrawal
-        dex.withdraw(req.tokenOut, outAmount);
-
-        // Step 4: Update the user's Vault balance
+        // Update user's Vault balance with tokenOut.
         balances[req.user][req.tokenOut] += outAmount;
     }
 }
