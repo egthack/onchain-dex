@@ -34,13 +34,13 @@ library VaultLib {
         require(ta.approved, "Trader not approved");
         require(block.timestamp < ta.expiry, "Trader approval expired");
         require(req.amountIn <= ta.maxOrderSize, "Order size exceeds limit");
+        // TODO: check preApprovalId is not duplicated (not )
         require(
             req.preApprovalId != bytes32(0),
             "Pre-approval ID should not be 0"
         );
 
         // 追加署名検証: ユーザーの署名が有効であることを確認
-        // ※ TradeRequest 構造体に 'bytes signature' フィールドを追加してください
         bytes32 hash = keccak256(
             abi.encodePacked(
                 req.user,

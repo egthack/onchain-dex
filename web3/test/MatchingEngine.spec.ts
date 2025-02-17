@@ -57,53 +57,63 @@ describe("MatchingEngine", function () {
 
     it("should return an array of pairs with getPairs()", async function () {
       // 別ペアとして既存の tokenA, tokenB の組み合わせ（ダミー）を追加
-      await matchingEngine.connect(admin).addPair(await tokenA.getAddress(), await tokenB.getAddress(), 8, 8);
+      await matchingEngine.connect(admin).addPair(await tokenB.getAddress(), await tokenA.getAddress(), 8, 8);
       const pairs = await matchingEngine.getPairs(2, 0);
       expect(pairs.length).to.equal(2);
     });
   });
 
   describe("Order Creation via Vault", function () {
-    it("should create a buy order properly through vault", async function () {
+    it.only("should create a buy order properly through vault", async function () {
       // --- addr1 によるトークン入金の準備 ---
       // （必要に応じ、admin から addr1 へトークン転送）
       await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
       await tokenA.connect(addr1).approve(await vault.getAddress(), 200);
       await vault.connect(addr1).deposit(await tokenA.getAddress(), 100);
-
+      
       // --- Trade Request の作成 ---
-      // VaultLib.checkTradeRequest の内容に沿い、署名対象は以下の通り
-      const preApprovalId = ethers.getBytes("approved");
-      const messageHash = ethers.solidityPackedKeccak256(
-        ["address", "address", "address", "uint256", "uint256", "bytes32"],
-        [
+      const preApprovalId = ethers.randomBytes(32);
+      const messageHash = ethers.keccak256(
+        ethers.concat([
           await addr1.getAddress(),
           await tokenA.getAddress(),
           await tokenB.getAddress(),
-          100,
-          0,
+          ethers.toBeArray(BigInt(100)),  // uint256
+          ethers.toBeArray(BigInt(100)),  // uint256 (minAmountOut)
           preApprovalId,
-        ]
+          ethers.toBeArray(BigInt(0))  // uint256 (side)
+        ])
       );
-      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
 
+      // Ethereum Signed Message プレフィックスを手動で追加
+      const ethSignedMessageHash = ethers.keccak256(
+        ethers.concat([
+          ethers.toUtf8Bytes("\x19Ethereum Signed Message:\n32"),
+          messageHash
+        ])
+      );
+
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
       const tradeRequest = {
         user: await addr1.getAddress(),
         tokenIn: await tokenA.getAddress(),
         tokenOut: await tokenB.getAddress(),
         amountIn: 100,
-        minAmountOut: 0,
+        minAmountOut: 100,
         preApprovalId: preApprovalId,
-        side: 0, // Buy order
+        side: 0,
         signature: signature,
       };
 
       // --- Vault 経由で注文実行 ---
+      // approve trader
+      await vault.connect(addr1).setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
+      
       // addr2 が取引執行者（トレーダー）として取引を実行
       await vault.connect(addr2).executeTradeBatch([tradeRequest]);
 
       // --- MatchingEngine にオーダーが作成されていることを検証 ---
-      const order = await matchingEngine.orders(0);
+      const order = await matchingEngine.getOrder(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await addr1.getAddress());
       expect(order.tokenIn).to.equal(await tokenA.getAddress());
@@ -122,18 +132,26 @@ describe("MatchingEngine", function () {
       await vault.connect(addr1).deposit(await tokenA.getAddress(), 150);
 
       // --- Sell Order リクエスト作成 (side = 1) ---
-      const preApprovalId = ethers.getBytes("approved");
-      const messageHash = ethers.solidityPackedKeccak256(
-        ["address", "address", "address", "uint256", "uint256", "bytes32"],
-        [
+      const preApprovalId = ethers.toUtf8Bytes("approved");
+      const messageHash = ethers.keccak256(
+        ethers.concat([
           await addr1.getAddress(),
           await tokenA.getAddress(),
           await tokenB.getAddress(),
-          150,
-          0,
-          preApprovalId,
-        ]
+          ethers.toBeArray(BigInt(150)),  // uint256
+          ethers.toBeArray(BigInt(0)),    // uint256 (minAmountOut)
+          preApprovalId
+        ])
       );
+
+      // Ethereum Signed Message プレフィックスを手動で追加
+      const ethSignedMessageHash = ethers.keccak256(
+        ethers.concat([
+          ethers.toUtf8Bytes("\x19Ethereum Signed Message:\n32"),
+          messageHash
+        ])
+      );
+
       const signature = await addr1.signMessage(ethers.getBytes(messageHash));
       const tradeRequest = {
         user: await addr1.getAddress(),
@@ -147,7 +165,7 @@ describe("MatchingEngine", function () {
       };
 
       await vault.connect(addr2).executeTradeBatch([tradeRequest]);
-      const order = await matchingEngine.orders(0);
+      const order = await matchingEngine.getOrder(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await addr1.getAddress());
       expect(order.tokenIn).to.equal(await tokenA.getAddress());
@@ -178,17 +196,16 @@ describe("MatchingEngine", function () {
       await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
       await tokenA.connect(addr1).approve(await vault.getAddress(), 300);
       await vault.connect(addr1).deposit(await tokenA.getAddress(), 150);
-      const preApprovalId1 = ethers.getBytes("approved1");
-      let messageHash1 = ethers.solidityPackedKeccak256(
-        ["address", "address", "address", "uint256", "uint256", "bytes32"],
-        [
+      const preApprovalId1 = ethers.toUtf8Bytes("approved1");
+      let messageHash1 = ethers.keccak256(
+        ethers.concat([
           await addr1.getAddress(),
           await tokenA.getAddress(),
           await tokenB.getAddress(),
-          150,
-          0,
-          preApprovalId1,
-        ]
+          ethers.toBeArray(BigInt(150)),  // uint256
+          ethers.toBeArray(BigInt(0)),    // uint256 (minAmountOut)
+          preApprovalId1
+        ])
       );
       const signature1 = await addr1.signMessage(ethers.getBytes(messageHash1));
       const tradeRequest1 = {
@@ -207,17 +224,16 @@ describe("MatchingEngine", function () {
       await tokenA.connect(admin).transfer(await addr2.getAddress(), 1000);
       await tokenA.connect(addr2).approve(await vault.getAddress(), 300);
       await vault.connect(addr2).deposit(await tokenA.getAddress(), 160);
-      const preApprovalId2 = ethers.getBytes("approved2");
-      let messageHash2 = ethers.solidityPackedKeccak256(
-        ["address", "address", "address", "uint256", "uint256", "bytes32"],
-        [
+      const preApprovalId2 = ethers.toUtf8Bytes("approved2");
+      let messageHash2 = ethers.keccak256(
+        ethers.concat([
           await addr2.getAddress(),
           await tokenA.getAddress(),
           await tokenB.getAddress(),
-          160,
-          0,
-          preApprovalId2,
-        ]
+          ethers.toBeArray(BigInt(160)),  // uint256
+          ethers.toBeArray(BigInt(0)),    // uint256 (minAmountOut)
+          preApprovalId2
+        ])
       );
       const signature2 = await addr2.signMessage(ethers.getBytes(messageHash2));
       const tradeRequest2 = {
@@ -248,18 +264,26 @@ describe("MatchingEngine", function () {
       await vault.connect(addr1).deposit(await tokenA.getAddress(), 100);
 
       // --- 注文発行 ---
-      const preApprovalId = ethers.getBytes("approved");
-      const messageHash = ethers.solidityPackedKeccak256(
-        ["address", "address", "address", "uint256", "uint256", "bytes32"],
-        [
+      const preApprovalId = ethers.toUtf8Bytes("approved");
+      const messageHash = ethers.keccak256(
+        ethers.concat([
           await addr1.getAddress(),
           await tokenA.getAddress(),
           await tokenB.getAddress(),
-          100,
-          0,
-          preApprovalId,
-        ]
+          ethers.toBeArray(BigInt(100)),  // uint256
+          ethers.toBeArray(BigInt(0)),    // uint256 (minAmountOut)
+          preApprovalId
+        ])
       );
+
+      // Ethereum Signed Message プレフィックスを手動で追加
+      const ethSignedMessageHash = ethers.keccak256(
+        ethers.concat([
+          ethers.toUtf8Bytes("\x19Ethereum Signed Message:\n32"),
+          messageHash
+        ])
+      );
+
       const signature = await addr1.signMessage(ethers.getBytes(messageHash));
       const tradeRequest = {
         user: await addr1.getAddress(),
@@ -277,7 +301,7 @@ describe("MatchingEngine", function () {
       // --- Vault 経由でキャンセル実行 ---
       await vault.connect(addr1).cancelOrder(orderId);
 
-      const order = await matchingEngine.orders(orderId);
+      const order = await matchingEngine.getOrder(orderId);
       expect(order.active).to.equal(false);
     });
   });

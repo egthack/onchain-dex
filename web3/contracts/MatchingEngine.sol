@@ -29,7 +29,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     // Mapping: trading pair ID (keccak256(tokenIn, tokenOut)) => OrderBook.
     mapping(bytes32 => OrderBook) internal orderBooks;
     // Mapping: order ID => Order.
-    mapping(uint256 => Order) public orders;
+    mapping(uint256 => Order) internal orders;
     uint256 public nextOrderId;
 
     // Fee rates in basis points (e.g., 10 = 0.1%).
