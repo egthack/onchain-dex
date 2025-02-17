@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-/**
- * @notice IMatchingEngine interface
- * @dev The matching engine places orders, performs matching and returns the output amount (tokenOut)
- *      after executing the trade.
- */
+/// @notice Interface for the MatchingEngine.
 interface IMatchingEngine {
     // Enum for order side.
     enum OrderSide {
@@ -13,18 +9,19 @@ interface IMatchingEngine {
         Sell
     }
 
-    // Events as part of the external API.
-    event OrderPlaced(
-        uint256 indexed orderId,
-        address indexed user,
-        OrderSide side,
-        address tokenIn,
-        address tokenOut,
-        uint256 price,
-        uint256 amount
-    );
-    event FeeRatesUpdated(uint256 makerFeeRate, uint256 takerFeeRate);
-
+    struct Order {
+        uint256 id;
+        address user;
+        address tokenIn;
+        address tokenOut;
+        uint256 price;
+        uint256 amount;
+        OrderSide side;
+        uint256 timestamp;
+        bool active;
+        uint256 next;
+    }
+    
     /**
      * @notice Places an order on the matching engine.
      * @param tokenIn The token being sold.
@@ -41,4 +38,18 @@ interface IMatchingEngine {
         uint256 amountIn,
         uint256 minAmountOut
     ) external returns (uint256 outAmount);
+
+    /**
+     * @notice Returns the order information for the specified orderId
+     * @param orderId The ID of the order to retrieve.
+     * @return order The order information.
+     */
+    function getOrder(uint256 orderId) external view returns (Order memory order);
+
+    /**
+     * @notice Cancels an order on the matching engine.
+     * @param orderId The ID of the order to cancel.
+     * @return success True if the order was successfully cancelled, false otherwise.
+     */
+    function cancelOrder(uint256 orderId) external returns (bool success);
 }

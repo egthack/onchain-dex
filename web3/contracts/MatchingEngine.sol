@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "./interfaces/IERC20.sol";
+import "hardhat/console.sol";
 import "./library/RedBlackTreeLib.sol";
+import "./interfaces/IERC20.sol";
 import "./interfaces/IMatchingEngine.sol";
+import "./Events.sol"; 
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title MatchingEngine
@@ -11,30 +14,14 @@ import "./interfaces/IMatchingEngine.sol";
  *      It maintains order books using a Red-Black Tree, supports partial fills (FIFO),
  *      calculates maker/taker fees (collected per tokenOut), and provides snapshot functions for front-end use.
  */
-contract MatchingEngine {
+contract MatchingEngine is IMatchingEngine, Ownable {
     using RedBlackTreeLib for RedBlackTreeLib.Tree;
-
-    // Using OrderSide enum from IMatchingEngine interface.
-
-    // Order structure with token pair info.
-    struct Order {
-        uint256 id;
-        address user;
-        address tokenIn; // Token being sold
-        address tokenOut; // Token being bought
-        uint256 price; // Price: tokenOut per tokenIn (multiplier)
-        uint256 amount; // Remaining order amount
-        IMatchingEngine.OrderSide side;
-        uint256 timestamp;
-        bool active;
-        uint256 next; // Linked list pointer for FIFO within same price level.
-    }
 
     // OrderBook structure for a specific trading pair.
     struct OrderBook {
-        RedBlackTreeLib.Tree buyTree; // Buy orders (max price first)
-        RedBlackTreeLib.Tree sellTree; // Sell orders (min price first)
-        // Mapping: price level => array of order IDs (FIFO)
+        RedBlackTreeLib.Tree buyTree;   // Buy orders (max price first).
+        RedBlackTreeLib.Tree sellTree;  // Sell orders (min price first).
+        // Mapping: price level => array of order IDs (FIFO).
         mapping(uint256 => uint256[]) buyOrdersAtPrice;
         mapping(uint256 => uint256[]) sellOrdersAtPrice;
     }
@@ -52,62 +39,38 @@ contract MatchingEngine {
     mapping(address => uint256) public makerFeesCollected;
     mapping(address => uint256) public takerFeesCollected;
 
-    address public admin;
-
     // Array of pair IDs for front-end iteration.
     bytes32[] public pairKeys;
     // Mapping: pair ID => Pair (token addresses and decimals).
     struct Pair {
-        address[2] tokenz; // [base, quote]
-        uint256[2] decimals; // [base decimals, quote decimals]
+        address[2] tokenz;       // [base, quote].
+        uint256[2] decimals;     // [base decimals, quote decimals].
     }
     mapping(bytes32 => Pair) internal pairs;
 
-    // Events.
-    event OrderPlaced(
-        uint256 indexed orderId,
-        address indexed user,
-        IMatchingEngine.OrderSide side,
-        address tokenIn,
-        address tokenOut,
-        uint256 price,
-        uint256 amount
-    );
-    event OrderCancelled(uint256 indexed orderId, address indexed user);
-    event TradeExecuted(
-        uint256 indexed buyOrderId,
-        uint256 indexed sellOrderId,
-        address tokenIn,
-        address tokenOut,
-        uint256 price,
-        uint256 amount,
-        uint256 makerFee,
-        uint256 takerFee
-    );
-    event FeesWithdrawn(
-        address indexed token,
-        uint256 makerFeeAmount,
-        uint256 takerFeeAmount
-    );
-    event PairAdded(
-        bytes32 indexed pairId,
-        address tokenIn,
-        address tokenOut,
-        uint256[2] decimals,
-        uint256 timestamp
-    );
-    // New event for fee rate updates
-    event FeeRatesUpdated(uint256 makerFeeRate, uint256 takerFeeRate);
+    // Maximum iterations for matching to prevent out-of-gas.
+    uint256 constant MAX_MATCH_ITERATIONS = 2;
+    address public admin;
+    address public vaultAddress;
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "Only admin");
-        _;
-    }
-
-    constructor(uint256 _makerFeeRate, uint256 _takerFeeRate) {
+    constructor(uint256 _makerFeeRate, uint256 _takerFeeRate) Ownable(msg.sender) {
         admin = msg.sender;
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
+    }
+
+    /** @notice Sets the vault address.
+      * Only the owner can set it.
+      * @param _vault The address of the TradingVault contract.
+      */
+    function setVaultAddress(address _vault) external onlyOwner {
+        vaultAddress = _vault;
+    }
+
+    /** @dev Restricts function call to the vault only */
+    modifier onlyVault() {
+        require(msg.sender == vaultAddress, "Only vault allowed");
+        _;
     }
 
     // Utility: Compute a unique pair ID from tokenIn and tokenOut.
@@ -132,21 +95,12 @@ contract MatchingEngine {
         address tokenOut,
         uint256 decimalsBase,
         uint256 decimalsQuote
-    ) external onlyAdmin {
+    ) external onlyOwner {
         bytes32 pairId = getPairId(tokenIn, tokenOut);
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
-        pairs[pairId] = Pair(
-            [tokenIn, tokenOut],
-            [decimalsBase, decimalsQuote]
-        );
+        pairs[pairId] = Pair([tokenIn, tokenOut], [decimalsBase, decimalsQuote]);
         pairKeys.push(pairId);
-        emit PairAdded(
-            pairId,
-            tokenIn,
-            tokenOut,
-            [decimalsBase, decimalsQuote],
-            block.timestamp
-        );
+        emit PairAdded(pairId, tokenIn, tokenOut, [decimalsBase, decimalsQuote], block.timestamp);
     }
 
     // ---------------- Order Placement & Matching ----------------
@@ -165,10 +119,10 @@ contract MatchingEngine {
     function placeOrder(
         address tokenIn,
         address tokenOut,
-        IMatchingEngine.OrderSide side,
+        OrderSide side,
         uint256 price,
         uint256 amount
-    ) external returns (uint256 orderId) {
+    ) external override onlyVault returns (uint256 orderId) {
         require(amount > 0, "Amount must be > 0");
         require(price > 0, "Price must be > 0");
 
@@ -188,7 +142,7 @@ contract MatchingEngine {
 
         bytes32 pairId = getPairId(tokenIn, tokenOut);
         OrderBook storage ob = orderBooks[pairId];
-        if (side == IMatchingEngine.OrderSide.Buy) {
+        if (side == OrderSide.Buy) {
             ob.buyOrdersAtPrice[price].push(orderId);
             if (!ob.buyTree.exists(price)) {
                 ob.buyTree.insert(price);
@@ -199,16 +153,7 @@ contract MatchingEngine {
                 ob.sellTree.insert(price);
             }
         }
-        emit OrderPlaced(
-            orderId,
-            msg.sender,
-            side,
-            tokenIn,
-            tokenOut,
-            price,
-            amount
-        );
-
+        emit OrderPlaced(orderId, msg.sender, side, tokenIn, tokenOut, price, amount);
         _matchOrder(pairId, orderId);
         return orderId;
     }
@@ -216,7 +161,8 @@ contract MatchingEngine {
     /**
      * @dev Internal function to match an order with orders on the opposite side.
      *      Matches orders in FIFO order within each price level.
-     *      Calculates maker and taker fees (collected in tokenOut) and emits TradeExecuted events.
+     *      Calculates maker/taker fees (collected in tokenOut) and emits TradeExecuted events.
+     *      Limits total iterations to MAX_MATCH_ITERATIONS to avoid out-of-gas.
      * @param pairId Trading pair identifier.
      * @param orderId Incoming order ID.
      */
@@ -226,19 +172,19 @@ contract MatchingEngine {
 
         OrderBook storage ob = orderBooks[pairId];
         uint256 remaining = incoming.amount;
-
-        if (incoming.side == IMatchingEngine.OrderSide.Buy) {
+        uint256 iterations = 0;
+        if (incoming.side == OrderSide.Buy) {
             // Match buy order against sell orders with price <= incoming.price.
             uint256 bestSellPrice = ob.sellTree.getMin();
             while (
                 remaining > 0 &&
                 bestSellPrice > 0 &&
-                bestSellPrice <= incoming.price
+                bestSellPrice <= incoming.price &&
+                iterations < MAX_MATCH_ITERATIONS
             ) {
-                uint256[] storage sellList = ob.sellOrdersAtPrice[
-                    bestSellPrice
-                ];
+                uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
                 for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
+                    iterations++;
                     uint256 sellOrderId = sellList[i];
                     Order storage sellOrder = orders[sellOrderId];
                     if (!sellOrder.active) {
@@ -246,12 +192,11 @@ contract MatchingEngine {
                         sellList.pop();
                         continue;
                     }
-                    uint256 fill = remaining < sellOrder.amount
-                        ? remaining
-                        : sellOrder.amount;
-                    uint256 tradeVolume = fill * bestSellPrice; // In tokenOut units.
-                    uint256 makerFee = (tradeVolume * makerFeeRate) / 10000;
-                    uint256 takerFee = (tradeVolume * takerFeeRate) / 10000;
+                    uint256 fill = remaining < sellOrder.amount ? remaining : sellOrder.amount;
+
+                    // tradeVolume = fill * bestSellPrice; // In tokenOut units.
+                    uint256 makerFee = (fill * bestSellPrice * makerFeeRate) / 10000;
+                    uint256 takerFee = (fill * bestSellPrice * takerFeeRate) / 10000;
 
                     sellOrder.amount -= fill;
                     remaining -= fill;
@@ -266,8 +211,8 @@ contract MatchingEngine {
                     takerFeesCollected[incoming.tokenOut] += takerFee;
 
                     emit TradeExecuted(
-                        orderId, // Buy order ID (taker)
-                        sellOrderId, // Sell order ID (maker)
+                        orderId,         // Buy order ID (taker)
+                        sellOrderId,     // Sell order ID (maker)
                         incoming.tokenIn,
                         incoming.tokenOut,
                         bestSellPrice,
@@ -287,10 +232,12 @@ contract MatchingEngine {
             while (
                 remaining > 0 &&
                 bestBuyPrice > 0 &&
-                bestBuyPrice >= incoming.price
+                bestBuyPrice >= incoming.price &&
+                iterations < MAX_MATCH_ITERATIONS
             ) {
                 uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
                 for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
+                    iterations++;
                     uint256 buyOrderId = buyList[i];
                     Order storage buyOrder = orders[buyOrderId];
                     if (!buyOrder.active) {
@@ -298,12 +245,9 @@ contract MatchingEngine {
                         buyList.pop();
                         continue;
                     }
-                    uint256 fill = remaining < buyOrder.amount
-                        ? remaining
-                        : buyOrder.amount;
-                    uint256 tradeVolume = fill * bestBuyPrice;
-                    uint256 makerFee = (tradeVolume * makerFeeRate) / 10000;
-                    uint256 takerFee = (tradeVolume * takerFeeRate) / 10000;
+                    uint256 fill = remaining < buyOrder.amount ? remaining : buyOrder.amount;
+                    uint256 makerFee = (fill * bestBuyPrice * makerFeeRate) / 10000;
+                    uint256 takerFee = (fill * bestBuyPrice * takerFeeRate) / 10000;
 
                     buyOrder.amount -= fill;
                     remaining -= fill;
@@ -318,8 +262,8 @@ contract MatchingEngine {
                     takerFeesCollected[incoming.tokenOut] += takerFee;
 
                     emit TradeExecuted(
-                        buyOrderId, // Buy order ID (maker)
-                        orderId, // Sell order ID (taker)
+                        buyOrderId,      // Buy order ID (maker)
+                        orderId,         // Sell order ID (taker)
                         incoming.tokenIn,
                         incoming.tokenOut,
                         bestBuyPrice,
@@ -341,6 +285,78 @@ contract MatchingEngine {
     }
 
     // ---------------- Snapshot Functions for Front-End ----------------
+
+    struct OrderResult {
+        uint256 price;
+        uint256 orderId;
+        uint256 nextOrderId;
+        address maker;
+        uint256 expiry;
+        uint256 tokens;
+        uint256 availableBase;
+        uint256 availableQuote;
+    }
+
+    struct BestOrderResult {
+        uint256 price;
+        uint256 orderId;
+        uint256 nextOrderId;
+        address maker;
+        uint256 expiry;
+        uint256 tokens;
+        uint256 availableBase;
+        uint256 availableQuote;
+    }
+
+    struct PairResult {
+        bytes32 pairId;
+        address[2] tokenz;
+        uint256[2] decimals;
+        BestOrderResult bestBuyOrder;
+        BestOrderResult bestSellOrder;
+    }
+
+    struct TokenInfoResult {
+        string symbol;
+        string name;
+        uint8 decimals;
+        uint totalSupply;
+    }
+
+    struct TokenBalanceAndAllowanceResult {
+        uint balance;
+        uint allowance;
+    }
+
+    /**
+     * @notice Cancels an active order.
+     * @param orderId The ID of the order to cancel.
+     * @return true if the cancellation succeeded.
+     */
+    function cancelOrder(uint256 orderId) external onlyVault returns (bool) {
+        Order storage order = orders[orderId];
+        require(order.active, "Order is not active");
+
+        bytes32 pairId = getPairId(order.tokenIn, order.tokenOut);
+        OrderBook storage ob = orderBooks[pairId];
+        if (order.side == OrderSide.Buy) {
+            ob.buyTree.remove(order.price);
+        } else {
+            ob.sellTree.remove(order.price);
+        }
+
+        order.active = false;
+        return true;
+    }
+
+    /**
+     * @notice Returns the order information for the specified orderId
+     * @param orderId The ID of the order to retrieve.
+     * @return order The order information.
+     */
+    function getOrder(uint256 orderId) external view returns (Order memory order) {
+        return orders[orderId];
+    }
 
     /**
      * @notice Returns an array of orders for a given trading pair and side at a specified price level.
@@ -365,15 +381,14 @@ contract MatchingEngine {
         for (uint256 i = 0; i < orderIds.length && index < count; i++) {
             Order storage ord = orders[orderIds[i]];
             if (!ord.active) continue;
-            // For simplicity, available amounts are assumed to be the remaining order amount.
             orderResults[index] = OrderResult({
                 price: ord.price,
                 orderId: ord.id,
                 nextOrderId: ord.next,
                 maker: ord.user,
-                expiry: ord.timestamp, // Using timestamp as a placeholder for expiry.
+                expiry: ord.timestamp, // Placeholder for expiry.
                 tokens: ord.amount,
-                availableBase: ord.amount,
+                availableBase: ord.amount, // Simplified; adjust if necessary.
                 availableQuote: ord.amount * ord.price
             });
             index++;
@@ -381,24 +396,53 @@ contract MatchingEngine {
     }
 
     /**
+     * @notice Returns the best (first active) order for a given trading pair and side.
+     * @param pairId The trading pair identifier.
+     * @param side Order side (Buy or Sell).
+     * @return orderResult The best order as a BestOrderResult struct.
+     */
+    function getBestOrder(
+        bytes32 pairId,
+        IMatchingEngine.OrderSide side
+    ) public view returns (BestOrderResult memory orderResult) {
+        OrderBook storage ob = orderBooks[pairId];
+        uint256 bestPrice;
+        uint256[] storage ordersAtPrice;
+        if (side == IMatchingEngine.OrderSide.Buy) {
+            bestPrice = ob.buyTree.getMax();
+            ordersAtPrice = ob.buyOrdersAtPrice[bestPrice];
+        } else {
+            bestPrice = ob.sellTree.getMin();
+            ordersAtPrice = ob.sellOrdersAtPrice[bestPrice];
+        }
+        if (bestPrice == 0 || ordersAtPrice.length == 0) {
+            return orderResult;
+        }
+        uint256 bestOrderId = ordersAtPrice[0];
+        Order storage o = orders[bestOrderId];
+        orderResult = BestOrderResult({
+            price: bestPrice,
+            orderId: o.id,
+            nextOrderId: ordersAtPrice.length > 1 ? ordersAtPrice[1] : 0,
+            maker: o.user,
+            expiry: o.timestamp,
+            tokens: o.amount,
+            availableBase: o.amount,
+            availableQuote: o.amount * o.price
+        });
+    }
+
+    /**
      * @notice Returns pair information along with best buy and sell orders.
      * @param i Index of the pair.
      * @return pairResult The pair result structure.
      */
-    function getPair(
-        uint i
-    ) external view returns (PairResult memory pairResult) {
+    function getPair(uint i) external view returns (PairResult memory pairResult) {
         require(i < pairKeys.length, "Index out of range");
         bytes32 pairId = pairKeys[i];
         Pair memory p = pairs[pairId];
-        BestOrderResult memory bestBuy = getBestOrder(
-            pairId,
-            IMatchingEngine.OrderSide.Buy
-        );
-        BestOrderResult memory bestSell = getBestOrder(
-            pairId,
-            IMatchingEngine.OrderSide.Sell
-        );
+        BestOrderResult memory bestBuy = getBestOrder(pairId, IMatchingEngine.OrderSide.Buy);
+        BestOrderResult memory bestSell = getBestOrder(pairId, IMatchingEngine.OrderSide.Sell);
         pairResult = PairResult({
             pairId: pairId,
             tokenz: [p.tokenz[0], p.tokenz[1]],
@@ -414,10 +458,7 @@ contract MatchingEngine {
      * @param offset Starting index.
      * @return pairResults Array of PairResult structures.
      */
-    function getPairs(
-        uint count,
-        uint offset
-    ) external view returns (PairResult[] memory pairResults) {
+    function getPairs(uint count, uint offset) external view returns (PairResult[] memory pairResults) {
         require(offset < pairKeys.length, "Offset out of range");
         uint256 len = (offset + count > pairKeys.length)
             ? pairKeys.length - offset
@@ -433,9 +474,7 @@ contract MatchingEngine {
      * @param tokens Array of token addresses.
      * @return results Array of TokenInfoResult structures.
      */
-    function getTokenInfo(
-        address[] calldata tokens
-    ) external view returns (TokenInfoResult[] memory results) {
+    function getTokenInfo(address[] calldata tokens) external view returns (TokenInfoResult[] memory results) {
         results = new TokenInfoResult[](tokens.length);
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 t = IERC20(tokens[i]);
@@ -476,10 +515,7 @@ contract MatchingEngine {
      * @param _makerFeeRate New maker fee rate in basis points.
      * @param _takerFeeRate New taker fee rate in basis points.
      */
-    function setFeeRates(
-        uint256 _makerFeeRate,
-        uint256 _takerFeeRate
-    ) external onlyAdmin {
+    function setFeeRates(uint256 _makerFeeRate, uint256 _takerFeeRate) external onlyOwner {
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
         emit FeeRatesUpdated(_makerFeeRate, _takerFeeRate);
@@ -489,7 +525,7 @@ contract MatchingEngine {
      * @notice Allows the admin to withdraw collected fees for a given token (tokenOut).
      * @param token The token address.
      */
-    function withdrawFees(address token) external onlyAdmin {
+    function withdrawFees(address token) external onlyOwner {
         uint256 makerAmount = makerFeesCollected[token];
         uint256 takerAmount = takerFeesCollected[token];
         require(makerAmount + takerAmount > 0, "No fees to withdraw");
@@ -498,85 +534,4 @@ contract MatchingEngine {
         IERC20(token).transfer(admin, makerAmount + takerAmount);
         emit FeesWithdrawn(token, makerAmount, takerAmount);
     }
-
-    /**
-     * @notice Returns the best order for a given trading pair and order side.
-     * @param pairId The trading pair identifier.
-     * @param side The side of the order (Buy or Sell).
-     * @return orderResult The best order as a BestOrderResult struct.
-     */
-    function getBestOrder(
-        bytes32 pairId,
-        IMatchingEngine.OrderSide side
-    ) public view returns (BestOrderResult memory orderResult) {
-        OrderBook storage ob = orderBooks[pairId];
-        uint256 bestPrice;
-        uint256[] storage ordersAtPrice;
-        if (side == IMatchingEngine.OrderSide.Buy) {
-            bestPrice = ob.buyTree.getMax();
-            ordersAtPrice = ob.buyOrdersAtPrice[bestPrice];
-        } else {
-            bestPrice = ob.sellTree.getMin();
-            ordersAtPrice = ob.sellOrdersAtPrice[bestPrice];
-        }
-        if (bestPrice == 0 || ordersAtPrice.length == 0) {
-            return orderResult;
-        }
-        uint256 bestOrderId = ordersAtPrice[0];
-        Order storage o = orders[bestOrderId];
-        orderResult = BestOrderResult({
-            price: bestPrice,
-            orderId: bestOrderId,
-            nextOrderId: ordersAtPrice.length > 1 ? ordersAtPrice[1] : 0,
-            maker: o.user,
-            expiry: o.timestamp, // ※ 本来は有効期限などを利用する場合は適切に変更してください
-            tokens: o.amount,
-            availableBase: o.amount, // 仮実装。必要に応じて発注者の実際の残高等から算出してください
-            availableQuote: 0 // 仮実装。算出ロジックに合わせて修正してください
-        });
-    }
-}
-
-// ---------------- Structs for Front-End Snapshot Results ----------------
-
-struct OrderResult {
-    uint256 price;
-    uint256 orderId;
-    uint256 nextOrderId;
-    address maker;
-    uint256 expiry;
-    uint256 tokens;
-    uint256 availableBase;
-    uint256 availableQuote;
-}
-
-struct BestOrderResult {
-    uint256 price;
-    uint256 orderId;
-    uint256 nextOrderId;
-    address maker;
-    uint256 expiry;
-    uint256 tokens;
-    uint256 availableBase;
-    uint256 availableQuote;
-}
-
-struct PairResult {
-    bytes32 pairId;
-    address[2] tokenz;
-    uint256[2] decimals;
-    BestOrderResult bestBuyOrder;
-    BestOrderResult bestSellOrder;
-}
-
-struct TokenInfoResult {
-    string symbol;
-    string name;
-    uint8 decimals;
-    uint totalSupply;
-}
-
-struct TokenBalanceAndAllowanceResult {
-    uint balance;
-    uint allowance;
 }

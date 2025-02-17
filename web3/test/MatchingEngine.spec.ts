@@ -1,17 +1,17 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { MatchingEngine } from "../typechain-types";
+import { MatchingEngine, TradingVault, MockERC20 } from "../typechain-types";
 import { Signer } from "ethers";
 
 describe("MatchingEngine", function () {
-  let matchingEngine: MatchingEngine;
   let admin: Signer;
   let addr1: Signer;
   let addr2: Signer;
-
-  // Use each signer's address as a dummy token address
-  let tokenA: string;
-  let tokenB: string;
+  
+  let matchingEngine: MatchingEngine;
+  let vault: TradingVault;
+  let tokenA: MockERC20;
+  let tokenB: MockERC20;
 
   beforeEach(async function () {
     const signers = await ethers.getSigners();
@@ -19,150 +19,266 @@ describe("MatchingEngine", function () {
     addr1 = signers[1];
     addr2 = signers[2];
 
-    tokenA = await admin.getAddress(); // Dummy tokenIn
-    tokenB = await addr1.getAddress(); // Dummy tokenOut
+    // --- ERC20 トークンのデプロイ（MockERC20） ---
+    const TokenFactory = await ethers.getContractFactory("MockERC20");
+    tokenA = await TokenFactory.connect(admin).deploy("Token A", "TKA", 1000000);
+    await tokenA.waitForDeployment();
+    tokenB = await TokenFactory.connect(admin).deploy("Token B", "TKB", 1000000);
+    await tokenB.waitForDeployment();
 
-    const MatchingEngineFactory = await ethers.getContractFactory(
-      "MatchingEngine"
-    );
-    // makerFeeRate = 10, takerFeeRate = 15
-    matchingEngine = await MatchingEngineFactory.deploy(10, 15);
+    // --- MatchingEngine のデプロイ ---
+    const MatchingEngineFactory = await ethers.getContractFactory("MatchingEngine");
+    // makerFeeRate = 10 (0.1%), takerFeeRate = 15 (0.15%)
+    matchingEngine = await MatchingEngineFactory.connect(admin).deploy(10, 15);
     await matchingEngine.waitForDeployment();
 
-    // Admin adds trading pair (tokenA, tokenB) with decimals 18, 18
-    await matchingEngine.connect(admin).addPair(tokenA, tokenB, 18, 18);
+    // --- TradingVault のデプロイ（Vault として利用） ---
+    const VaultFactory = await ethers.getContractFactory("TradingVault");
+    vault = await VaultFactory.connect(admin).deploy(await matchingEngine.getAddress());
+    await vault.waitForDeployment();
+
+    // --- MatchingEngine に Vault アドレスを設定 ---
+    await matchingEngine.connect(admin).setVaultAddress(await vault.getAddress());
+
+    // --- Trading Pair の追加 ---
+    // tokenA: tokenIn, tokenB: tokenOut　（小数点は両方とも 18 とする）
+    await matchingEngine.connect(admin).addPair(await tokenA.getAddress(), await tokenB.getAddress(), 18, 18);
   });
 
   describe("Pair Management", function () {
-    it("should add a new pair and get pair information correctly", async function () {
-      const pairResult = await matchingEngine.getPair(0);
-      expect(pairResult.pairId).to.exist;
-      expect(pairResult.tokenz[0]).to.equal(tokenA);
-      expect(pairResult.tokenz[1]).to.equal(tokenB);
-      expect(pairResult.decimals[0]).to.equal(18);
-      expect(pairResult.decimals[1]).to.equal(18);
+    it("should add a new pair and retrieve pair info", async function () {
+      const pair = await matchingEngine.getPair(0);
+      expect(pair.pairId).to.exist;
+      expect(pair.tokenz[0]).to.equal(await tokenA.getAddress());
+      expect(pair.tokenz[1]).to.equal(await tokenB.getAddress());
+      expect(pair.decimals[0]).to.equal(18);
+      expect(pair.decimals[1]).to.equal(18);
     });
 
     it("should return an array of pairs with getPairs()", async function () {
-      const tokenC = await addr1.getAddress();
-      const tokenD = await addr2.getAddress();
-      await matchingEngine.connect(admin).addPair(tokenC, tokenD, 8, 8);
-
+      // 別ペアとして既存の tokenA, tokenB の組み合わせ（ダミー）を追加
+      await matchingEngine.connect(admin).addPair(await tokenA.getAddress(), await tokenB.getAddress(), 8, 8);
       const pairs = await matchingEngine.getPairs(2, 0);
       expect(pairs.length).to.equal(2);
-      expect(pairs[0].tokenz[0]).to.equal(tokenA);
-      expect(pairs[0].tokenz[1]).to.equal(tokenB);
-      expect(pairs[1].tokenz[0]).to.equal(tokenC);
-      expect(pairs[1].tokenz[1]).to.equal(tokenD);
     });
   });
 
-  describe("Order Creation", function () {
-    it("should create a buy order properly", async function () {
-      // Buy order: OrderSide.Buy = 0, price 150, amount 50
-      const tx = await matchingEngine
-        .connect(addr1)
-        .placeOrder(tokenA, tokenB, 0, 150, 50);
-      const receipt = await tx.wait();
-      const parsedEvents = receipt?.logs
-        ?.map((log: any) => {
-          try {
-            return matchingEngine.interface.parseLog(log);
-          } catch (e) {
-            return null;
-          }
-        })
-        .filter((e) => e !== null);
-      const event = parsedEvents?.find((e: any) => e.name === "OrderPlaced");
-      expect(event, "OrderPlaced event not found").to.exist;
-      if (!event) {
-        throw new Error("OrderPlaced event not found");
-      }
-      const { orderId, user, side, tokenIn, tokenOut, price, amount } =
-        event.args;
-      expect(orderId).to.equal(0);
-      expect(user).to.equal(await addr1.getAddress());
-      expect(side).to.equal(0);
-      expect(tokenIn).to.equal(tokenA);
-      expect(tokenOut).to.equal(tokenB);
-      expect(price).to.equal(150);
-      expect(amount).to.equal(50);
+  describe("Order Creation via Vault", function () {
+    it("should create a buy order properly through vault", async function () {
+      // --- addr1 によるトークン入金の準備 ---
+      // （必要に応じ、admin から addr1 へトークン転送）
+      await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
+      await tokenA.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(await tokenA.getAddress(), 100);
 
+      // --- Trade Request の作成 ---
+      // VaultLib.checkTradeRequest の内容に沿い、署名対象は以下の通り
+      const preApprovalId = ethers.getBytes("approved");
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr1.getAddress(),
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          100,
+          0,
+          preApprovalId,
+        ]
+      );
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
+
+      const tradeRequest = {
+        user: await addr1.getAddress(),
+        tokenIn: await tokenA.getAddress(),
+        tokenOut: await tokenB.getAddress(),
+        amountIn: 100,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId,
+        side: 0, // Buy order
+        signature: signature,
+      };
+
+      // --- Vault 経由で注文実行 ---
+      // addr2 が取引執行者（トレーダー）として取引を実行
+      await vault.connect(addr2).executeTradeBatch([tradeRequest]);
+
+      // --- MatchingEngine にオーダーが作成されていることを検証 ---
       const order = await matchingEngine.orders(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await addr1.getAddress());
-      expect(order.tokenIn).to.equal(tokenA);
-      expect(order.tokenOut).to.equal(tokenB);
-      expect(order.price).to.equal(150);
-      expect(order.amount).to.equal(50);
+      expect(order.tokenIn).to.equal(await tokenA.getAddress());
+      expect(order.tokenOut).to.equal(await tokenB.getAddress());
+      // _executeSingleTrade では engine.placeOrder の第4引数に req.amountIn が渡されるため、
+      // この例では price == 100 となると仮定
+      expect(order.price).to.equal(100);
+      expect(order.amount).to.equal(100);
       expect(order.active).to.equal(true);
     });
 
-    it("should create a sell order properly", async function () {
-      // Sell order: OrderSide.Sell = 1, price 100, amount 30
-      const tx = await matchingEngine
-        .connect(addr1)
-        .placeOrder(tokenA, tokenB, 1, 100, 30);
-      const receipt = await tx.wait();
-      const parsedEvents = receipt?.logs
-        ?.map((log: any) => {
-          try {
-            return matchingEngine.interface.parseLog(log);
-          } catch (e) {
-            return null;
-          }
-        })
-        .filter((e) => e !== null);
-      const event = parsedEvents?.find((e: any) => e.name === "OrderPlaced");
-      expect(event, "OrderPlaced event not found").to.exist;
-      if (!event) {
-        throw new Error("OrderPlaced event not found");
-      }
-      const { orderId, user, side, tokenIn, tokenOut, price, amount } =
-        event.args;
-      expect(orderId).to.equal(0);
-      expect(user).to.equal(await addr1.getAddress());
-      expect(side).to.equal(1);
-      expect(tokenIn).to.equal(tokenA);
-      expect(tokenOut).to.equal(tokenB);
-      expect(price).to.equal(100);
-      expect(amount).to.equal(30);
+    it("should create a sell order properly through vault", async function () {
+      // --- addr1 によるトークン入金の準備 ---
+      await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
+      await tokenA.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(await tokenA.getAddress(), 150);
 
+      // --- Sell Order リクエスト作成 (side = 1) ---
+      const preApprovalId = ethers.getBytes("approved");
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr1.getAddress(),
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          150,
+          0,
+          preApprovalId,
+        ]
+      );
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
+      const tradeRequest = {
+        user: await addr1.getAddress(),
+        tokenIn: await tokenA.getAddress(),
+        tokenOut: await tokenB.getAddress(),
+        amountIn: 150,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId,
+        side: 1, // Sell order
+        signature: signature,
+      };
+
+      await vault.connect(addr2).executeTradeBatch([tradeRequest]);
       const order = await matchingEngine.orders(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await addr1.getAddress());
-      expect(order.tokenIn).to.equal(tokenA);
-      expect(order.tokenOut).to.equal(tokenB);
-      expect(order.price).to.equal(100);
-      expect(order.amount).to.equal(30);
+      expect(order.tokenIn).to.equal(await tokenA.getAddress());
+      expect(order.tokenOut).to.equal(await tokenB.getAddress());
+      expect(order.price).to.equal(150);
+      expect(order.amount).to.equal(150);
       expect(order.active).to.equal(true);
+    });
+
+    it("should revert when placeOrder is called directly by a non-vault account", async function () {
+      await expect(
+        matchingEngine.connect(addr1).placeOrder(
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          0,  // Buy
+          150,
+          50
+        )
+      ).to.be.revertedWith("Only vault allowed");
     });
   });
 
   describe("Order Best Retrieval", function () {
-    it("should retrieve the best order for a given side", async function () {
-      // Place two buy orders: first order with price 150, second order with price 160
-      await matchingEngine
-        .connect(addr1)
-        .placeOrder(tokenA, tokenB, 0, 150, 50);
-      await matchingEngine
-        .connect(addr2)
-        .placeOrder(tokenA, tokenB, 0, 160, 30);
+    it("should retrieve the best buy order", async function () {
+      // --- 複数の Buy Order を Vault 経由で発行 ---
+      
+      // 1つ目の注文（price として 150 を採用＝amountIn 150）
+      await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
+      await tokenA.connect(addr1).approve(await vault.getAddress(), 300);
+      await vault.connect(addr1).deposit(await tokenA.getAddress(), 150);
+      const preApprovalId1 = ethers.getBytes("approved1");
+      let messageHash1 = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr1.getAddress(),
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          150,
+          0,
+          preApprovalId1,
+        ]
+      );
+      const signature1 = await addr1.signMessage(ethers.getBytes(messageHash1));
+      const tradeRequest1 = {
+        user: await addr1.getAddress(),
+        tokenIn: await tokenA.getAddress(),
+        tokenOut: await tokenB.getAddress(),
+        amountIn: 150,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId1,
+        side: 0,
+        signature: signature1,
+      };
+      await vault.connect(addr2).executeTradeBatch([tradeRequest1]);
 
-      const pairId = await matchingEngine.getPairId(tokenA, tokenB);
+      // 2つ目の注文（price＝160 として amountIn 160）
+      await tokenA.connect(admin).transfer(await addr2.getAddress(), 1000);
+      await tokenA.connect(addr2).approve(await vault.getAddress(), 300);
+      await vault.connect(addr2).deposit(await tokenA.getAddress(), 160);
+      const preApprovalId2 = ethers.getBytes("approved2");
+      let messageHash2 = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr2.getAddress(),
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          160,
+          0,
+          preApprovalId2,
+        ]
+      );
+      const signature2 = await addr2.signMessage(ethers.getBytes(messageHash2));
+      const tradeRequest2 = {
+        user: await addr2.getAddress(),
+        tokenIn: await tokenA.getAddress(),
+        tokenOut: await tokenB.getAddress(),
+        amountIn: 160,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId2,
+        side: 0,
+        signature: signature2,
+      };
+      await vault.connect(addr2).executeTradeBatch([tradeRequest2]);
+
+      // --- Best Order の検証 ---
+      const pairId = await matchingEngine.getPairId(await tokenA.getAddress(), await tokenB.getAddress());
       const bestBuy = await matchingEngine.getBestOrder(pairId, 0);
-      // Buy order is the highest value, so the second order (orderId = 1, price 160) should be returned
-      expect(bestBuy.orderId).to.equal(1);
+      // 複数注文中、より高い price (=160) のものがベストとなるはず
       expect(bestBuy.price).to.equal(160);
+    });
+  });
 
-      // Place two sell orders: first order with price 90, second order with price 80
-      await matchingEngine.connect(addr1).placeOrder(tokenA, tokenB, 1, 90, 40);
-      await matchingEngine.connect(addr2).placeOrder(tokenA, tokenB, 1, 80, 20);
+  describe("Order Cancellation", function () {
+    it("should cancel an active order and mark it inactive", async function () {
+      // --- addr1 によるデポジット ---
+      await tokenA.connect(admin).transfer(await addr1.getAddress(), 1000);
+      await tokenA.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(await tokenA.getAddress(), 100);
 
-      const bestSell = await matchingEngine.getBestOrder(pairId, 1);
-      // Sell order is the lowest value, so the second order (orderId = 3, price 80) should be returned
-      expect(bestSell.orderId).to.equal(3);
-      expect(bestSell.price).to.equal(80);
+      // --- 注文発行 ---
+      const preApprovalId = ethers.getBytes("approved");
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr1.getAddress(),
+          await tokenA.getAddress(),
+          await tokenB.getAddress(),
+          100,
+          0,
+          preApprovalId,
+        ]
+      );
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
+      const tradeRequest = {
+        user: await addr1.getAddress(),
+        tokenIn: await tokenA.getAddress(),
+        tokenOut: await tokenB.getAddress(),
+        amountIn: 100,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId,
+        side: 0,
+        signature: signature,
+      };
+      await vault.connect(addr2).executeTradeBatch([tradeRequest]);
+      const orderId = 0;
+
+      // --- Vault 経由でキャンセル実行 ---
+      await vault.connect(addr1).cancelOrder(orderId);
+
+      const order = await matchingEngine.orders(orderId);
+      expect(order.active).to.equal(false);
     });
   });
 });

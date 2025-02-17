@@ -1,164 +1,99 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { MockERC20, TradingVault, MatchingEngine } from "../typechain-types";
-import { getBytes, Signer } from "ethers";
+import { Signer } from "ethers";
 
 describe("TradingVault", function () {
   let owner: Signer;
   let addr1: Signer;
   let addr2: Signer;
-  let tokenContract: MockERC20;
-  let vaultContract: TradingVault;
-  let engineContract: MatchingEngine;
+  let token: MockERC20;
+  let vault: TradingVault;
+  let engine: MatchingEngine;
 
-  // Fixture: deploy mock token, MatchingEngine as engine, and TradingVault using engine address.
+
   const deployFixture = async () => {
     const signers = await ethers.getSigners();
     owner = signers[0];
     addr1 = signers[1];
     addr2 = signers[2];
 
-    // Deploy MockERC20
+    // Deploy MockERC20 token
     const TokenFactory = await ethers.getContractFactory("MockERC20");
-    tokenContract = await TokenFactory.connect(owner).deploy(
-      "Mock Token",
-      "MTK",
-      1000000
-    );
-    await tokenContract.waitForDeployment();
-    // Transfer tokens to addr1
-    await tokenContract.connect(owner).transfer(await addr1.getAddress(), 1000);
+    token = await TokenFactory.connect(owner).deploy("Mock Token", "MTK", 1000000);
+    await token.waitForDeployment();
 
-    // Deploy MatchingEngine as engine (makerFeeRate = 10, takerFeeRate = 15)
+    // Transfer some tokens to addr1 for deposit tests
+    await token.connect(owner).transfer(await addr1.getAddress(), 1000);
+
+    // Deploy MatchingEngine with fee rates (makerFeeRate = 10, takerFeeRate = 15)
     const EngineFactory = await ethers.getContractFactory("MatchingEngine");
-    engineContract = await EngineFactory.connect(owner).deploy(10, 15);
-    await engineContract.waitForDeployment();
-    // 管理者により、取引ペア(tokenIn, tokenOut) を追加
-    // ※ここでは便宜的に tokenContract.getAddress() を両方に採用
-    await engineContract
-      .connect(owner)
-      .addPair(tokenContract.getAddress(), tokenContract.getAddress(), 18, 18);
+    engine = await EngineFactory.connect(owner).deploy(10, 15);
+    await engine.waitForDeployment();
 
-    // Deploy TradingVault with engine address
+    // Add a trading pair into the MatchingEngine.
+    // ここでは、tokenIn と tokenOut の両方に同じ token.address を指定する
+    await engine.connect(owner).addPair(token.getAddress(), token.getAddress(), 18, 18);
+
+    // Deploy TradingVault with the engine address
     const VaultFactory = await ethers.getContractFactory("TradingVault");
-    vaultContract = await VaultFactory.connect(owner).deploy(
-      engineContract.getAddress()
-    );
-    await vaultContract.waitForDeployment();
+    vault = await VaultFactory.connect(owner).deploy(await engine.getAddress());
+    await vault.waitForDeployment();
 
-    return {
-      owner,
-      addr1,
-      addr2,
-      tokenContract,
-      vaultContract,
-      engineContract,
-    };
+    return { owner, addr1, addr2, token, vault, engine };
   };
 
+  beforeEach(async function () {
+    await deployFixture();
+  });
+
   describe("Deposit", function () {
-    it("should allow depositing tokens", async function () {
-      const { tokenContract, vaultContract, addr1 } = await deployFixture();
-      // Approve token transfer for addr1
-      await tokenContract
-        .connect(addr1)
-        .approve(vaultContract.getAddress(), 200);
-      // deposit(token, amount) を実行
-      await vaultContract
-        .connect(addr1)
-        .deposit(tokenContract.getAddress(), 100);
-      const balance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
+    it("should allow deposits", async function () {
+      // addr1 承認後、100 トークンを deposit する
+      await token.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(token.getAddress(), 100);
+      const balance = await vault.getBalance(await addr1.getAddress(), token.getAddress());
       expect(balance).to.equal(100);
     });
 
     it("should revert deposit if amount is zero", async function () {
-      const { tokenContract, vaultContract, addr1 } = await deployFixture();
       await expect(
-        vaultContract.connect(addr1).deposit(tokenContract.getAddress(), 0)
+        vault.connect(addr1).deposit(token.getAddress(), 0)
       ).to.be.revertedWith("Amount must be > 0");
     });
   });
 
   describe("Withdraw", function () {
     beforeEach(async function () {
-      const fixture = await deployFixture();
-      ({ tokenContract, vaultContract, addr1 } = fixture);
-      // まず deposit しておく
-      await tokenContract
-        .connect(addr1)
-        .approve(vaultContract.getAddress(), 200);
-      await vaultContract
-        .connect(addr1)
-        .deposit(tokenContract.getAddress(), 100);
+      await token.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(token.getAddress(), 100);
     });
 
     it("should allow withdrawal of tokens", async function () {
-      await vaultContract
-        .connect(addr1)
-        .withdraw(tokenContract.getAddress(), 50);
-      const balance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
+      await vault.connect(addr1).withdraw(token.getAddress(), 50);
+      const balance = await vault.getBalance(await addr1.getAddress(), token.getAddress());
       expect(balance).to.equal(50);
     });
 
-    it("should revert withdrawal if amount exceeds balance", async function () {
+    it("should revert withdrawal when amount exceeds balance", async function () {
       await expect(
-        vaultContract.connect(addr1).withdraw(tokenContract.getAddress(), 150)
+        vault.connect(addr1).withdraw(token.getAddress(), 150)
       ).to.be.revertedWith("Insufficient balance");
     });
 
-    it("should allow withdrawal of zero tokens without change", async function () {
-      const beforeBalance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
-      // 0トークンの引き出しは問題なく動作する（no-op）
-      await vaultContract
-        .connect(addr1)
-        .withdraw(tokenContract.getAddress(), 0);
-      const afterBalance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
-      expect(afterBalance).to.equal(beforeBalance);
-    });
-  });
-
-  describe("Get Balance", function () {
-    beforeEach(async function () {
-      const fixture = await deployFixture();
-      ({ tokenContract, vaultContract, addr1 } = fixture);
-      // Deposit tokens
-      await tokenContract
-        .connect(addr1)
-        .approve(vaultContract.getAddress(), 200);
-      await vaultContract
-        .connect(addr1)
-        .deposit(tokenContract.getAddress(), 100);
-    });
-
-    it("should return the correct balance", async function () {
-      const balance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
-      expect(balance).to.equal(100);
+    it("should allow withdrawal of zero tokens without changes", async function () {
+      const before = await vault.getBalance(await addr1.getAddress(), token.getAddress());
+      await vault.connect(addr1).withdraw(token.getAddress(), 0);
+      const after = await vault.getBalance(await addr1.getAddress(), token.getAddress());
+      expect(after).to.equal(before);
     });
   });
 
   describe("Trader Approval", function () {
     it("should allow setting trader approval", async function () {
-      const { vaultContract, addr1, addr2 } = await deployFixture();
-      // addr1 sets trader approval for addr2 (approved=true, maxOrderSize=100, expiry=9999)
-      await vaultContract
-        .connect(addr1)
-        .setTraderApproval(await addr2.getAddress(), true, 100, 9999);
-      const approval = await vaultContract.traderApprovals(
+      // addr1 が addr2 に対して、承認 (approved=true, maxOrderSize=100, expiry=9999) を設定
+      await vault.connect(addr1).setTraderApproval(await addr2.getAddress(), true, 100, 9999);
+      const approval = await vault.traderApprovals(
         await addr1.getAddress(),
         await addr2.getAddress()
       );
@@ -169,61 +104,99 @@ describe("TradingVault", function () {
   });
 
   describe("Trade Request", function () {
+    // VaultLib の内部チェック等を前提として、トレードリクエストの実行をテスト
     it("should execute a trade request", async function () {
-      const { vaultContract, tokenContract, addr1, addr2 } =
-        await deployFixture();
+      // addr1 が 100 トークンを deposit する
+      await token.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(token.getAddress(), 100);
 
-      // Deposit tokens by addr1
-      await tokenContract
-        .connect(addr1)
-        .approve(vaultContract.getAddress(), 200);
-      await vaultContract
-        .connect(addr1)
-        .deposit(tokenContract.getAddress(), 100);
+      // addr1 が addr2 に対して承認を設定（委任取引者としての addr2）
+      await vault.connect(addr1).setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
 
-      // addr1 が addr2 に対して、十分な注文可能額と有効期限で承認を設定
-      await vaultContract
-        .connect(addr1)
-        .setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
-
-      // Create trade request (if preApprovalId is nonzero, treat as a Buy order)
-      const preApprovalId = ethers.encodeBytes32String("approved");
-
-      // Compute the message hash using the same method as VaultLib
+      // 取引リクエスト作成：今回は Buy 注文 (side = 0)
+      const preApprovalId = ethers.getBytes("approved");
       const messageHash = ethers.solidityPackedKeccak256(
         ["address", "address", "address", "uint256", "uint256", "bytes32"],
         [
           await addr1.getAddress(),
-          tokenContract.getAddress(),
-          tokenContract.getAddress(),
+          token.getAddress(),
+          token.getAddress(),
+          100,  // amountIn
+          0,    // minAmountOut
+          preApprovalId,
+        ]
+      );
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
+
+      const tradeRequest = {
+        user: await addr1.getAddress(),
+        tokenIn: token.getAddress(),
+        tokenOut: token.getAddress(),
+        amountIn: 100,
+        minAmountOut: 0,
+        preApprovalId: preApprovalId,
+        side: 0, // Buy order
+        signature: signature,
+      };
+
+      // addr2 がバッチ取引として実行
+      await vault.connect(addr2).executeTradeBatch([tradeRequest]);
+      // _executeSingleTrade 内で 100 トークンが Vault から引かれるため、最終的な残高は 0 となる
+      const finalBalance = await vault.getBalance(await addr1.getAddress(), token.getAddress());
+      expect(finalBalance).to.equal(0);
+    });
+  });
+
+  describe("Cancel Order", function () {
+    it("should cancel an active order and refund remaining funds", async function () {
+      // addr1 が 100 トークンを deposit する
+      await token.connect(addr1).approve(await vault.getAddress(), 200);
+      await vault.connect(addr1).deposit(token.getAddress(), 100);
+
+      // addr1 が addr2 に対して承認を設定
+      await vault.connect(addr1).setTraderApproval(await addr2.getAddress(), true, 100, 9999999999);
+
+      // 取引リクエスト作成 (side = 0: Buy)
+      const preApprovalId = ethers.getBytes("approved");
+      const messageHash = ethers.solidityPackedKeccak256(
+        ["address", "address", "address", "uint256", "uint256", "bytes32"],
+        [
+          await addr1.getAddress(),
+          token.getAddress(),
+          token.getAddress(),
           100,
           0,
           preApprovalId,
         ]
       );
-      // Arrayify the message hash for signMessage
-      const signature = await addr1.signMessage(getBytes(messageHash));
+      const signature = await addr1.signMessage(ethers.getBytes(messageHash));
 
       const tradeRequest = {
         user: await addr1.getAddress(),
-        tokenIn: tokenContract.getAddress(),
-        tokenOut: tokenContract.getAddress(),
+        tokenIn: token.getAddress(),
+        tokenOut: token.getAddress(),
         amountIn: 100,
         minAmountOut: 0,
         preApprovalId: preApprovalId,
-        side: 0, // 0: Buy, 1: Sell
+        side: 0,
         signature: signature,
       };
 
-      // Execute trade batch (internally calls MatchingEngine.placeOrder)
-      await vaultContract.connect(addr2).executeTradeBatch([tradeRequest]);
+      // addr2 が executeTradeBatch を実行 => MatchingEngine に注文が作成され、addr1 の Vault から 100 トークンが引かれる
+      await vault.connect(addr2).executeTradeBatch([tradeRequest]);
+      // この時点で、MatchingEngine の注文 ID は 0 から開始すると仮定
+      const orderId = 0;
 
-      // Inside _executeSingleTrade, subtract 100 from balances[req.user][tokenIn] and add the output from engine.placeOrder (orderId 0)
-      const finalBalance = await vaultContract.getBalance(
-        await addr1.getAddress(),
-        tokenContract.getAddress()
-      );
-      expect(finalBalance).to.equal(0);
+      // addr1 が注文キャンセルを実行（所有者のみキャンセル可能）
+      await vault.connect(addr1).cancelOrder(orderId);
+
+      // キャンセル処理時、注文にロックされていた未約定の数量が Vault に返金される（テストでは 100 トークンが返金）
+      const balanceAfter = await vault.getBalance(await addr1.getAddress(), token.getAddress());
+      expect(balanceAfter).to.equal(100);
+
+      // MatchingEngine 側の注文はキャンセル済みとなっているはず
+      const orderData = await engine.getOrder(orderId);
+      expect(orderData.active).to.equal(false);
     });
   });
 });

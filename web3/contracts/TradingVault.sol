@@ -1,50 +1,28 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IVault.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
+import "./Events.sol"; 
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title TradingVault
- * @dev Manages user balances and delegated trading approvals.
- *      It allows deposits, withdrawals, and executing batched trades via an external MatchingEngine.
+ * @dev Manages user balances, fund deposits/withdrawals, and delegated trading approvals.
+ *      It allows executing batched trades via an external MatchingEngine.
  */
-contract TradingVault is IVault {
-    // Mapping: user => (token => balance)
+contract TradingVault is IVault, Ownable {
+    // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
-
     // Mapping: user => (trader => TraderApproval)
-    mapping(address => mapping(address => VaultLib.TraderApproval))
-        public traderApprovals;
+    mapping(address => mapping(address => VaultLib.TraderApproval)) public traderApprovals;
 
     // Matching engine contract instance
     IMatchingEngine public engine;
 
-    // Events for important operations
-    event Deposit(address indexed user, address indexed token, uint256 amount);
-    event Withdrawal(
-        address indexed user,
-        address indexed token,
-        uint256 amount
-    );
-    event TraderApprovalSet(
-        address indexed user,
-        address indexed trader,
-        bool approved,
-        uint256 maxOrderSize,
-        uint256 expiry
-    );
-    event TradeExecuted(
-        address indexed user,
-        address indexed tokenIn,
-        address indexed tokenOut,
-        uint256 amountIn,
-        uint256 outAmount
-    );
-
-    constructor(address _engine) {
+    constructor(address _engine) Ownable(msg.sender) {
         engine = IMatchingEngine(_engine);
     }
 
@@ -82,31 +60,20 @@ contract TradingVault is IVault {
             maxOrderSize: maxOrderSize,
             expiry: expiry
         });
-        emit TraderApprovalSet(
-            msg.sender,
-            trader,
-            approved,
-            maxOrderSize,
-            expiry
-        );
+        emit TraderApprovalSet(msg.sender, trader, approved, maxOrderSize, expiry);
     }
 
     /**
      * @notice Retrieves the balance for a given user and token.
      */
-    function getBalance(
-        address user,
-        address token
-    ) external view returns (uint256) {
+    function getBalance(address user, address token) external view returns (uint256) {
         return balances[user][token];
     }
 
     /**
      * @notice Executes a batch of trades via the MatchingEngine.
      */
-    function executeTradeBatch(
-        VaultLib.TradeRequest[] calldata trades
-    ) external payable override {
+    function executeTradeBatch(VaultLib.TradeRequest[] calldata trades) external payable override {
         for (uint256 i = 0; i < trades.length; i++) {
             _executeSingleTrade(trades[i]);
         }
@@ -115,23 +82,17 @@ contract TradingVault is IVault {
     /**
      * @dev Executes a single trade by interacting with the MatchingEngine.
      *      Deducts tokenIn from the user's Vault balance, approves the MatchingEngine,
-     *      and then calls placeOrder on the MatchingEngine.
+     *      and calls placeOrder on the MatchingEngine.
      *      The MatchingEngine returns the output amount (tokenOut) after matching.
      */
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         // Check authorization using VaultLib.
         VaultLib.checkTradeRequest(req, traderApprovals);
-        require(
-            balances[req.user][req.tokenIn] >= req.amountIn,
-            "Insufficient vault balance"
-        );
+        require(balances[req.user][req.tokenIn] >= req.amountIn, "Insufficient vault balance");
 
         // Deduct funds from the Vault.
         balances[req.user][req.tokenIn] -= req.amountIn;
-
-        // Approve MatchingEngine to spend tokenIn.
-        IERC20(req.tokenIn).approve(address(engine), req.amountIn);
-
+        
         // Call MatchingEngine to place the order.
         uint256 outAmount = engine.placeOrder(
             req.tokenIn,
@@ -140,15 +101,32 @@ contract TradingVault is IVault {
             req.amountIn,
             req.minAmountOut
         );
+        
 
         // Update user's Vault balance with tokenOut.
         balances[req.user][req.tokenOut] += outAmount;
-        emit TradeExecuted(
-            req.user,
-            req.tokenIn,
-            req.tokenOut,
-            req.amountIn,
-            outAmount
-        );
+    }
+
+    /**
+     * @notice Cancels an active order in the MatchingEngine and refunds locked funds.
+     * @param orderId The ID of the order to cancel.
+     * @return true if cancellation succeeded.
+     */
+    function cancelOrder(uint256 orderId) external returns (bool) {
+        // 1. Get the order information from the MatchingEngine
+        IMatchingEngine.Order memory order = engine.getOrder(orderId);
+        require(order.user == msg.sender, "Not order owner");
+        
+        // 2. Execute the cancellation process on the MatchingEngine
+        bool success = engine.cancelOrder(orderId);
+        require(success, "Engine cancellation failed");
+        
+        // 3. Refund the remaining order amount (order.amount) to the user's vault balance
+        if (order.amount > 0) {
+            balances[msg.sender][order.tokenIn] += order.amount;
+        }
+        
+        emit OrderCancelled(orderId, msg.sender);
+        return true;
     }
 }
