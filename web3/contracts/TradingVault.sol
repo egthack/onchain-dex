@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./interfaces/IVault.sol";
+import "./interfaces/ITradingVault.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
 import "./Events.sol"; 
@@ -13,7 +13,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Manages user balances, fund deposits/withdrawals.
  *      It allows executing batched trades via an external MatchingEngine.
  */
-contract TradingVault is IVault, Ownable {
+contract TradingVault is ITradingVault, Ownable {
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
@@ -58,6 +58,16 @@ contract TradingVault is IVault, Ownable {
         for (uint256 i = 0; i < trades.length; i++) {
             _executeSingleTrade(trades[i]);
         }
+    }
+
+    /**
+     * @notice Updates the balance for a given maker and token.
+     * @param maker The address of the maker.
+     * @param token The address of the token.
+     * @param amount The amount of tokens to update the balance by.
+     */
+    function updateMakerBalance(address maker, address token, uint256 amount) external {
+        balances[maker][token] += amount;
     }
 
     /**

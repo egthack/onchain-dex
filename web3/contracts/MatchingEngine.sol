@@ -7,6 +7,7 @@ import "./interfaces/IERC20.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./Events.sol"; 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/ITradingVault.sol";
 
 /**
  * @title MatchingEngine
@@ -52,7 +53,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     uint256 constant MAX_MATCH_ITERATIONS = 2;
     address public admin;
     address public vaultAddress;
-
+    ITradingVault public _tradingVault;
     constructor(uint256 _makerFeeRate, uint256 _takerFeeRate) Ownable(msg.sender) {
         admin = msg.sender;
         makerFeeRate = _makerFeeRate;
@@ -65,6 +66,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
       */
     function setVaultAddress(address _vault) external onlyOwner {
         vaultAddress = _vault;
+        _tradingVault = ITradingVault(_vault);
     }
 
     /** @dev Restricts function call to the vault only */
@@ -147,13 +149,11 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             ob.buyOrdersAtPrice[price].push(orderId);
             if (!ob.buyTree.exists(price)) {
                 ob.buyTree.insert(price);
-                console.log("ob.buyTree.getMax()", ob.buyTree.getMax());
             }
         } else {
             ob.sellOrdersAtPrice[price].push(orderId);
             if (!ob.sellTree.exists(price)) {
                 ob.sellTree.insert(price);
-                console.log("ob.sellTree.getMin()", ob.sellTree.getMin());
             }
         }
         emit OrderPlaced(orderId, user, side, base, quote, price, amount);
@@ -178,11 +178,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         uint256 remaining = incoming.amount;
         uint256 iterations = 0;
 
+        // TODO: makerのどのアドレスのどのトークンがどれだけ変動したか記録し、最後にupdateMakerBalanceを呼び出す
         if (incoming.side == OrderSide.Buy) {
             // Match buy order against sell orders with price <= incoming.price.
             uint256 bestSellPrice = ob.sellTree.getMin();
-            console.log("bestSellPrice", bestSellPrice);
-            console.log("incoming.price", incoming.price);
             while (
                 remaining > 0 &&
                 bestSellPrice > 0 &&
@@ -214,6 +213,11 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
+                    // Calculate the amount the maker (resting sell order owner) should receive in quote tokens.
+                    // makerReceived = (fill × bestSellPrice) – makerFee
+                    uint256 makerReceived = (fill * bestSellPrice) - makerFee;
+                    // Update maker's balance via TradingVault
+                    _tradingVault.updateMakerBalance(sellOrder.user, incoming.quote, makerReceived);
                     makerFeesCollected[incoming.quote] += makerFee;
                     takerFeesCollected[incoming.quote] += takerFee;
 
@@ -236,10 +240,6 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         } else {
             // For sell orders, match against buy orders with price >= incoming.price.
             uint256 bestBuyPrice = ob.buyTree.getMax();
-            console.log("bestBuyPrice", bestBuyPrice);
-            console.log("incoming.price", incoming.price);
-            console.log("remaining", remaining);
-            console.log("iterations", iterations);
             while (
                 remaining > 0 &&
                 bestBuyPrice > 0 &&
@@ -269,8 +269,13 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    makerFeesCollected[incoming.quote] += makerFee;
-                    takerFeesCollected[incoming.quote] += takerFee;
+                    // Calculate the amount the maker (resting buy order owner) should receive in base tokens.
+                    // makerReceived = (fill × bestBuyPrice) – makerFee
+                    uint256 makerReceived = (fill * bestBuyPrice) - makerFee;
+                    // Update maker's balance via TradingVault
+                    _tradingVault.updateMakerBalance(buyOrder.user, incoming.base, makerReceived);
+                    makerFeesCollected[incoming.base] += makerFee;
+                    takerFeesCollected[incoming.base] += takerFee;
 
                     emit TradeExecuted(
                         buyOrderId,      // Buy order ID (maker)
