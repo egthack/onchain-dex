@@ -27,16 +27,17 @@ interface IMatchingEngine {
      * @param tokenIn The token being sold.
      * @param tokenOut The token being bought.
      * @param side The order side.
-     * @param amountIn The amount of tokenIn to sell.
-     * @param minAmountOut The minimum acceptable amount of tokenOut.
+     * @param amount The amount of tokenIn to sell.
+     * @param price The price of the order.
      * @return outAmount The actual amount of tokenOut received after matching.
      */
     function placeOrder(
+        address user,
         address tokenIn,
         address tokenOut,
         OrderSide side,
-        uint256 amountIn,
-        uint256 minAmountOut
+        uint256 amount,
+        uint256 price
     ) external returns (uint256 outAmount);
 
     /**

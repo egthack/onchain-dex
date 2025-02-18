@@ -10,15 +10,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title TradingVault
- * @dev Manages user balances, fund deposits/withdrawals, and delegated trading approvals.
+ * @dev Manages user balances, fund deposits/withdrawals.
  *      It allows executing batched trades via an external MatchingEngine.
  */
 contract TradingVault is IVault, Ownable {
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
-    // Mapping: user => (trader => TraderApproval)
-    mapping(address => mapping(address => VaultLib.TraderApproval)) public traderApprovals;
-
     // Matching engine contract instance
     IMatchingEngine public engine;
 
@@ -46,22 +43,6 @@ contract TradingVault is IVault, Ownable {
         emit Withdrawal(msg.sender, token, amount);
     }
 
-    /**
-     * @notice Sets approval for bots or delegated traders.
-     */
-    function setTraderApproval(
-        address trader,
-        bool approved,
-        uint256 maxOrderSize,
-        uint256 expiry
-    ) external {
-        traderApprovals[msg.sender][trader] = VaultLib.TraderApproval({
-            approved: approved,
-            maxOrderSize: maxOrderSize,
-            expiry: expiry
-        });
-        emit TraderApprovalSet(msg.sender, trader, approved, maxOrderSize, expiry);
-    }
 
     /**
      * @notice Retrieves the balance for a given user and token.
@@ -87,22 +68,22 @@ contract TradingVault is IVault, Ownable {
      */
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         // Check authorization using VaultLib.
-        VaultLib.checkTradeRequest(req, traderApprovals);
-        require(balances[req.user][req.tokenIn] >= req.amountIn, "Insufficient vault balance");
+        VaultLib.checkTradeRequest(req);
+        require(balances[req.user][req.tokenIn] >= req.amount, "Insufficient vault balance");
 
         // Deduct funds from the Vault.
-        balances[req.user][req.tokenIn] -= req.amountIn;
+        balances[req.user][req.tokenIn] -= req.amount;
         
         // Call MatchingEngine to place the order.
         uint256 outAmount = engine.placeOrder(
+            req.user,
             req.tokenIn,
             req.tokenOut,
             req.side,
-            req.amountIn,
-            req.minAmountOut
+            req.amount,
+            req.price
         );
         
-
         // Update user's Vault balance with tokenOut.
         balances[req.user][req.tokenOut] += outAmount;
     }

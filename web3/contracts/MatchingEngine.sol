@@ -117,19 +117,20 @@ contract MatchingEngine is IMatchingEngine, Ownable {
      * Note: Funds must be locked in the Vault externally before placing the order.
      */
     function placeOrder(
+        address user,
         address tokenIn,
         address tokenOut,
-        OrderSide side,
-        uint256 price,
-        uint256 amount
-    ) external override onlyVault returns (uint256 orderId) {
+        OrderSide side,        
+        uint256 amount,
+        uint256 price
+    ) external onlyVault returns (uint256 orderId) {
         require(amount > 0, "Amount must be > 0");
         require(price > 0, "Price must be > 0");
 
         orderId = nextOrderId++;
         orders[orderId] = Order({
             id: orderId,
-            user: msg.sender,
+            user: user,
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             price: price,
@@ -153,7 +154,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                 ob.sellTree.insert(price);
             }
         }
-        emit OrderPlaced(orderId, msg.sender, side, tokenIn, tokenOut, price, amount);
+        emit OrderPlaced(orderId, user, side, tokenIn, tokenOut, price, amount);
         _matchOrder(pairId, orderId);
         return orderId;
     }
