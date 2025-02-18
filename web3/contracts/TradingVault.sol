@@ -62,30 +62,46 @@ contract TradingVault is IVault, Ownable {
 
     /**
      * @dev Executes a single trade by interacting with the MatchingEngine.
-     *      Deducts tokenIn from the user's Vault balance, approves the MatchingEngine,
+     *      Deducts base from the user's Vault balance, approves the MatchingEngine,
      *      and calls placeOrder on the MatchingEngine.
-     *      The MatchingEngine returns the output amount (tokenOut) after matching.
+     *      The MatchingEngine returns the output amount (quote) after matching.
      */
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
-        // Check authorization using VaultLib.
+        // Check trade request authorization.
         VaultLib.checkTradeRequest(req);
-        require(balances[req.user][req.tokenIn] >= req.amount, "Insufficient vault balance");
-
-        // Deduct funds from the Vault.
-        balances[req.user][req.tokenIn] -= req.amount;
         
-        // Call MatchingEngine to place the order.
-        uint256 outAmount = engine.placeOrder(
-            req.user,
-            req.tokenIn,
-            req.tokenOut,
-            req.side,
-            req.amount,
-            req.price
-        );
-        
-        // Update user's Vault balance with tokenOut.
-        balances[req.user][req.tokenOut] += outAmount;
+        uint256 outAmount;
+        if (req.side == IMatchingEngine.OrderSide.Buy) { // Buy order: use quote to pay
+            // In a buy order, the user pays using quote tokens.
+            uint256 requiredQuote = req.amount * req.price;
+            require(balances[req.user][req.quote] >= requiredQuote, "Insufficient vault balance");
+            balances[req.user][req.quote] -= requiredQuote;
+            
+            outAmount = engine.placeOrder(
+                req.user,
+                req.base,
+                req.quote,
+                req.side,
+                req.amount,
+                req.price
+            );
+            // For buy order, user receives base tokens.
+            balances[req.user][req.base] += outAmount;
+        } else { // Sell order: use base as collateral
+            require(balances[req.user][req.base] >= req.amount, "Insufficient vault balance");
+            balances[req.user][req.base] -= req.amount;
+            
+            outAmount = engine.placeOrder(
+                req.user,
+                req.base,
+                req.quote,
+                req.side,
+                req.amount,
+                req.price
+            );
+            // For sell order, user receives quote tokens.
+            balances[req.user][req.quote] += outAmount;
+        }
     }
 
     /**
@@ -104,7 +120,7 @@ contract TradingVault is IVault, Ownable {
         
         // 3. Refund the remaining order amount (order.amount) to the user's vault balance
         if (order.amount > 0) {
-            balances[msg.sender][order.tokenIn] += order.amount;
+            balances[msg.sender][order.base] += order.amount;
         }
         
         emit OrderCancelled(orderId, msg.sender);

@@ -12,8 +12,8 @@ interface IMatchingEngine {
     struct Order {
         uint256 id;
         address user;
-        address tokenIn;
-        address tokenOut;
+        address base;
+        address quote;
         uint256 price;
         uint256 amount;
         OrderSide side;
@@ -24,17 +24,17 @@ interface IMatchingEngine {
     
     /**
      * @notice Places an order on the matching engine.
-     * @param tokenIn The token being sold.
-     * @param tokenOut The token being bought.
+     * @param base The token being sold.
+     * @param quote The token being bought.
      * @param side The order side.
-     * @param amount The amount of tokenIn to sell.
+     * @param amount The amount of base to sell.
      * @param price The price of the order.
-     * @return outAmount The actual amount of tokenOut received after matching.
+     * @return outAmount The actual amount of quote received after matching.
      */
     function placeOrder(
         address user,
-        address tokenIn,
-        address tokenOut,
+        address base,
+        address quote,
         OrderSide side,
         uint256 amount,
         uint256 price

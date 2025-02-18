@@ -44,8 +44,25 @@ describe("MatchingEngine", function () {
     await matchingEngine.connect(admin).setVaultAddress(await vault.getAddress());
 
     // --- Trading Pair の追加 ---
-    // tokenA を tokenIn、tokenB を tokenOut として decimals は両方とも 18 とする
+    // tokenA を base、tokenB を quote として decimals は両方とも 18 とする
     await matchingEngine.connect(admin).addPair(await tokenA.getAddress(), await tokenB.getAddress(), 18, 18);
+
+
+    await tokenA.connect(admin).transfer(await user.getAddress(), 1000);
+    await tokenA.connect(user).approve(await vault.getAddress(), 500);
+    await vault.connect(user).deposit(await tokenA.getAddress(), 100);
+
+    await tokenA.connect(admin).transfer(await trader.getAddress(), 1000);
+    await tokenA.connect(trader).approve(await vault.getAddress(), 500);
+    await vault.connect(trader).deposit(await tokenA.getAddress(), 100);
+
+    await tokenB.connect(admin).transfer(await user.getAddress(), 1000);
+    await tokenB.connect(user).approve(await vault.getAddress(), 500);
+    await vault.connect(user).deposit(await tokenB.getAddress(), 100);
+
+    await tokenB.connect(admin).transfer(await trader.getAddress(), 1000);
+    await tokenB.connect(trader).approve(await vault.getAddress(), 500);
+    await vault.connect(trader).deposit(await tokenB.getAddress(), 100);
   });
 
   describe("Pair Management", function () {
@@ -78,8 +95,8 @@ describe("MatchingEngine", function () {
       // Traderが
       const tradeRequest = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
         amount: 100,
         price: 1
@@ -93,8 +110,8 @@ describe("MatchingEngine", function () {
       expect(order.id).to.equal(0);
       // トレーダー (trader) が executeTradeBatch を実行したが、取引は は user（委任者） になる
       expect(order.user).to.equal(await user.getAddress());
-      expect(order.tokenIn).to.equal(await tokenA.getAddress());
-      expect(order.tokenOut).to.equal(await tokenB.getAddress());
+      expect(order.base).to.equal(await tokenA.getAddress());
+      expect(order.quote).to.equal(await tokenB.getAddress());
       // _executeSingleTrade で注文価格として amount をそのまま price にしている前提（簡易例）
       expect(order.price).to.equal(1);
       expect(order.amount).to.equal(100);
@@ -102,19 +119,14 @@ describe("MatchingEngine", function () {
     });
 
     it("should create a sell order properly through vault", async function () {
-      // --- user によるトークン入金の準備 ---
-      await tokenA.connect(admin).transfer(await user.getAddress(), 1000);
-      await tokenA.connect(user).approve(await vault.getAddress(), 500);
-      await vault.connect(user).deposit(await tokenA.getAddress(), 150);
-
       // --- Trade Request の作成 (Sell order: side = 1) ---
-      // この例では amount = 150, price = 1 とする
+      // この例では amount = 100, price = 1 とする
       const tradeRequest = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 1,
-        amount: 150,
+        amount: 100,
         price: 1
       });
       // --- Vault 経由で注文実行 ---
@@ -124,10 +136,10 @@ describe("MatchingEngine", function () {
       const order = await matchingEngine.getOrder(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await user.getAddress());
-      expect(order.tokenIn).to.equal(await tokenA.getAddress());
-      expect(order.tokenOut).to.equal(await tokenB.getAddress());
+      expect(order.base).to.equal(await tokenA.getAddress());
+      expect(order.quote).to.equal(await tokenB.getAddress());
       expect(order.price).to.equal(1);
-      expect(order.amount).to.equal(150);
+      expect(order.amount).to.equal(100);
       expect(order.active).to.equal(true);
     });
 
@@ -138,8 +150,8 @@ describe("MatchingEngine", function () {
           await tokenA.getAddress(),
           await tokenB.getAddress(),
           0,  // side Buy
-          150,
-          50,
+          100,
+          1,
         )
       ).to.be.revertedWith("Only vault allowed");
     });
@@ -148,52 +160,43 @@ describe("MatchingEngine", function () {
   describe("Order Best Retrieval", function () {
     it("should retrieve the best buy order", async function () {
       // --- 複数の Buy Order を発行 ---
-      // 1つ目： price = 150, amount = 150
-      await tokenA.connect(admin).transfer(await user.getAddress(), 1000);
-      await tokenA.connect(user).approve(await vault.getAddress(), 500);
-      await vault.connect(user).deposit(await tokenA.getAddress(), 150);
+      // 1つ目： price = 1, amount = 100
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
-        amount: 150,
-        price: 150
+        amount: 100,
+        price: 1
       });
       await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-      // 2つ目： price = 160, amount = 160
-      await tokenA.connect(admin).transfer(await trader.getAddress(), 1000);
-      await tokenA.connect(trader).approve(await vault.getAddress(), 500);
-      await vault.connect(trader).deposit(await tokenA.getAddress(), 160);
+      // 2つ目： price = 2, amount = 100
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
-        amount: 160,
-        price: 160
+        amount: 100,
+        price: 2
       });
       await vault.connect(trader).executeTradeBatch([tradeRequest2]);
 
       // --- best order の検証 ---
       const pairId = await matchingEngine.getPairId(await tokenA.getAddress(), await tokenB.getAddress());
       const bestBuy = await matchingEngine.getBestOrder(pairId, 0);
-      // 複数注文中、price が高い方（この例では 160）の注文が返ると仮定
-      expect(bestBuy.price).to.equal(160);
+      // 複数注文中、price が高い方（この例では 2）の注文が返ると仮定
+      expect(bestBuy.price).to.equal(2);
     });
   });
 
   describe("Order Cancellation", function () {
     it("should cancel an active order and mark it inactive", async function () {
       // --- 事前に注文作成 ---
-      await tokenA.connect(admin).transfer(await user.getAddress(), 1000);
-      await tokenA.connect(user).approve(await vault.getAddress(), 500);
-      await vault.connect(user).deposit(await tokenA.getAddress(), 100);
       const tradeRequest = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
         amount: 100,
         price: 1
@@ -206,6 +209,60 @@ describe("MatchingEngine", function () {
 
       const order = await matchingEngine.getOrder(orderId);
       expect(order.active).to.equal(false);
+    });
+  });
+
+
+  describe("Order Matching", function () {
+    it.only("should match orders correctly", async function () {
+
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: tokenA,
+        quote: tokenB, 
+        side: 0,
+        amount: 100,
+        price: 1
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
+
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: tokenA,
+        quote: tokenB,
+        side: 1,
+        amount: 100,
+        price: 1
+      });
+      // ここでマッチングするはず
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
+
+      const tradeExecutedFilter = matchingEngine.filters.TradeExecuted();
+      const latestBlock = await ethers.provider.getBlockNumber();
+      const tradeExecutedEvents = await matchingEngine.queryFilter(tradeExecutedFilter, 0, latestBlock);
+
+      expect(tradeExecutedEvents.length).to.equal(1);
+
+      // --- 注文結果の検証 ---
+      const order1 = await matchingEngine.getOrder(0);
+      const order2 = await matchingEngine.getOrder(1);
+
+      expect(order1.active).to.equal(false);
+      expect(order2.active).to.equal(false);
+      
+      
+      // マッチング後、trader tokenA: 0, tokenB: 200
+      const traderBalanceA = await vault.getBalance(await trader.getAddress(), await tokenA.getAddress());
+      expect(traderBalanceA).to.equal(0);
+      const traderBalanceB = await vault.getBalance(await trader.getAddress(), await tokenB.getAddress());
+      expect(traderBalanceB).to.equal(200);
+      
+      // 同時に、user tokenA: 200, tokenB: 0
+      // TODO: マッチング後にマッチング相手の残高を差し引く処理が必要
+      // const userBalanceA = await vault.getBalance(await user.getAddress(), await tokenA.getAddress());
+      // expect(userBalanceA).to.equal(200);
+      const userBalanceB = await vault.getBalance(await user.getAddress(), await tokenB.getAddress());
+      expect(userBalanceB).to.equal(0);
     });
   });
 });

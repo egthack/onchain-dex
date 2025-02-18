@@ -6,8 +6,8 @@ import { createTradeRequest } from "./helpers/tradeHelper";
 
 export interface TradeRequest {
   user: string;
-  tokenIn: string;
-  tokenOut: string;
+  base: string;
+  quote: string;
   amount: number;
   price: number;
   side: number;
@@ -47,7 +47,7 @@ describe("TradingVault", function () {
     await engine.waitForDeployment();
 
     // Add a trading pair into the MatchingEngine.
-    // ここでは、tokenIn と tokenOut の両方に同じ token.address を指定する
+    // ここでは、base と quote の両方に同じ token.address を指定する
     await engine.connect(owner).addPair(tokenA.getAddress(), tokenB.getAddress(), 18, 18);
 
     // Deploy TradingVault with the engine address
@@ -118,8 +118,8 @@ describe("TradingVault", function () {
       // 取引リクエスト作成：今回は Buy 注文 (side = 0)
       const tradeRequest = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
         amount: 100,
         price: 1
@@ -141,8 +141,8 @@ describe("TradingVault", function () {
       // 取引リクエスト作成：今回は Buy 注文 (side = 0)
       const tradeRequest = await createTradeRequest({
         user: user,
-        tokenIn: tokenA,
-        tokenOut: tokenB,
+        base: tokenA,
+        quote: tokenB,
         side: 0,
         amount: 100,
         price: 1

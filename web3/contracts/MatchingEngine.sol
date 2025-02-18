@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @title MatchingEngine
  * @dev A production-oriented on-chain matching engine supporting multiple ERC20 token pairs.
  *      It maintains order books using a Red-Black Tree, supports partial fills (FIFO),
- *      calculates maker/taker fees (collected per tokenOut), and provides snapshot functions for front-end use.
+ *      calculates maker/taker fees (collected per quote), and provides snapshot functions for front-end use.
  */
 contract MatchingEngine is IMatchingEngine, Ownable {
     using RedBlackTreeLib for RedBlackTreeLib.Tree;
@@ -26,7 +26,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         mapping(uint256 => uint256[]) sellOrdersAtPrice;
     }
 
-    // Mapping: trading pair ID (keccak256(tokenIn, tokenOut)) => OrderBook.
+    // Mapping: trading pair ID (keccak256(base, quote)) => OrderBook.
     mapping(bytes32 => OrderBook) internal orderBooks;
     // Mapping: order ID => Order.
     mapping(uint256 => Order) internal orders;
@@ -35,7 +35,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     // Fee rates in basis points (e.g., 10 = 0.1%).
     uint256 public makerFeeRate;
     uint256 public takerFeeRate;
-    // Collected fees per tokenOut.
+    // Collected fees per quote.
     mapping(address => uint256) public makerFeesCollected;
     mapping(address => uint256) public takerFeesCollected;
 
@@ -73,66 +73,66 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         _;
     }
 
-    // Utility: Compute a unique pair ID from tokenIn and tokenOut.
+    // Utility: Compute a unique pair ID from base and quote.
     function getPairId(
-        address tokenIn,
-        address tokenOut
+        address base,
+        address quote
     ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(tokenIn, tokenOut));
+        return keccak256(abi.encodePacked(base, quote));
     }
 
     // ---------------- Pair Management ----------------
 
     /**
      * @notice Adds a new trading pair.
-     * @param tokenIn Token being sold (base).
-     * @param tokenOut Token being bought (quote).
-     * @param decimalsBase Decimals for tokenIn.
-     * @param decimalsQuote Decimals for tokenOut.
+     * @param base Token being sold (base).
+     * @param quote Token being bought (quote).
+     * @param decimalsBase Decimals for base.
+     * @param decimalsQuote Decimals for quote.
      */
     function addPair(
-        address tokenIn,
-        address tokenOut,
+        address base,
+        address quote,
         uint256 decimalsBase,
         uint256 decimalsQuote
     ) external onlyOwner {
-        bytes32 pairId = getPairId(tokenIn, tokenOut);
+        bytes32 pairId = getPairId(base, quote);
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
-        pairs[pairId] = Pair([tokenIn, tokenOut], [decimalsBase, decimalsQuote]);
+        pairs[pairId] = Pair([base, quote], [decimalsBase, decimalsQuote]);
         pairKeys.push(pairId);
-        emit PairAdded(pairId, tokenIn, tokenOut, [decimalsBase, decimalsQuote], block.timestamp);
+        emit PairAdded(pairId, base, quote, [decimalsBase, decimalsQuote], block.timestamp);
     }
 
     // ---------------- Order Placement & Matching ----------------
 
     /**
      * @notice Places a new order and attempts immediate matching.
-     * @param tokenIn Token being sold.
-     * @param tokenOut Token being bought.
+     * @param base Token being sold.
+     * @param quote Token being bought.
      * @param side Order side (Buy or Sell).
-     * @param price Order price (tokenOut per tokenIn).
+     * @param price Order price (quote per base).
      * @param amount Order amount.
-     * @return orderId The ID of the placed order.
+     * @return executedAmount The amount executed from the order.
      *
      * Note: Funds must be locked in the Vault externally before placing the order.
      */
     function placeOrder(
         address user,
-        address tokenIn,
-        address tokenOut,
+        address base,
+        address quote,
         OrderSide side,        
         uint256 amount,
         uint256 price
-    ) external onlyVault returns (uint256 orderId) {
+    ) external onlyVault returns (uint256 executedAmount) {
         require(amount > 0, "Amount must be > 0");
         require(price > 0, "Price must be > 0");
 
-        orderId = nextOrderId++;
+        uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
             id: orderId,
             user: user,
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
+            base: base,
+            quote: quote,
             price: price,
             amount: amount,
             side: side,
@@ -141,28 +141,31 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             next: 0
         });
 
-        bytes32 pairId = getPairId(tokenIn, tokenOut);
+        bytes32 pairId = getPairId(base, quote);
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
             ob.buyOrdersAtPrice[price].push(orderId);
             if (!ob.buyTree.exists(price)) {
                 ob.buyTree.insert(price);
+                console.log("ob.buyTree.getMax()", ob.buyTree.getMax());
             }
         } else {
             ob.sellOrdersAtPrice[price].push(orderId);
             if (!ob.sellTree.exists(price)) {
                 ob.sellTree.insert(price);
+                console.log("ob.sellTree.getMin()", ob.sellTree.getMin());
             }
         }
-        emit OrderPlaced(orderId, user, side, tokenIn, tokenOut, price, amount);
+        emit OrderPlaced(orderId, user, side, base, quote, price, amount);
         _matchOrder(pairId, orderId);
-        return orderId;
+        executedAmount = amount - orders[orderId].amount;
+        return executedAmount;
     }
 
     /**
      * @dev Internal function to match an order with orders on the opposite side.
      *      Matches orders in FIFO order within each price level.
-     *      Calculates maker/taker fees (collected in tokenOut) and emits TradeExecuted events.
+     *      Calculates maker/taker fees (collected in quote) and emits TradeExecuted events.
      *      Limits total iterations to MAX_MATCH_ITERATIONS to avoid out-of-gas.
      * @param pairId Trading pair identifier.
      * @param orderId Incoming order ID.
@@ -174,9 +177,12 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         OrderBook storage ob = orderBooks[pairId];
         uint256 remaining = incoming.amount;
         uint256 iterations = 0;
+
         if (incoming.side == OrderSide.Buy) {
             // Match buy order against sell orders with price <= incoming.price.
             uint256 bestSellPrice = ob.sellTree.getMin();
+            console.log("bestSellPrice", bestSellPrice);
+            console.log("incoming.price", incoming.price);
             while (
                 remaining > 0 &&
                 bestSellPrice > 0 &&
@@ -195,7 +201,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     }
                     uint256 fill = remaining < sellOrder.amount ? remaining : sellOrder.amount;
 
-                    // tradeVolume = fill * bestSellPrice; // In tokenOut units.
+                    // tradeVolume = fill * bestSellPrice; // In quote units.
                     uint256 makerFee = (fill * bestSellPrice * makerFeeRate) / 10000;
                     uint256 takerFee = (fill * bestSellPrice * takerFeeRate) / 10000;
 
@@ -208,14 +214,14 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    makerFeesCollected[incoming.tokenOut] += makerFee;
-                    takerFeesCollected[incoming.tokenOut] += takerFee;
+                    makerFeesCollected[incoming.quote] += makerFee;
+                    takerFeesCollected[incoming.quote] += takerFee;
 
                     emit TradeExecuted(
                         orderId,         // Buy order ID (taker)
                         sellOrderId,     // Sell order ID (maker)
-                        incoming.tokenIn,
-                        incoming.tokenOut,
+                        incoming.base,
+                        incoming.quote,
                         bestSellPrice,
                         fill,
                         makerFee,
@@ -230,6 +236,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         } else {
             // For sell orders, match against buy orders with price >= incoming.price.
             uint256 bestBuyPrice = ob.buyTree.getMax();
+            console.log("bestBuyPrice", bestBuyPrice);
+            console.log("incoming.price", incoming.price);
+            console.log("remaining", remaining);
+            console.log("iterations", iterations);
             while (
                 remaining > 0 &&
                 bestBuyPrice > 0 &&
@@ -259,14 +269,14 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    makerFeesCollected[incoming.tokenOut] += makerFee;
-                    takerFeesCollected[incoming.tokenOut] += takerFee;
+                    makerFeesCollected[incoming.quote] += makerFee;
+                    takerFeesCollected[incoming.quote] += takerFee;
 
                     emit TradeExecuted(
                         buyOrderId,      // Buy order ID (maker)
                         orderId,         // Sell order ID (taker)
-                        incoming.tokenIn,
-                        incoming.tokenOut,
+                        incoming.base,
+                        incoming.quote,
                         bestBuyPrice,
                         fill,
                         makerFee,
@@ -317,7 +327,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         BestOrderResult bestSellOrder;
     }
 
-    struct TokenInfoResult {
+    struct basefoResult {
         string symbol;
         string name;
         uint8 decimals;
@@ -338,7 +348,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         Order storage order = orders[orderId];
         require(order.active, "Order is not active");
 
-        bytes32 pairId = getPairId(order.tokenIn, order.tokenOut);
+        bytes32 pairId = getPairId(order.base, order.quote);
         OrderBook storage ob = orderBooks[pairId];
         if (order.side == OrderSide.Buy) {
             ob.buyTree.remove(order.price);
@@ -473,13 +483,13 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     /**
      * @notice Returns token information for a list of tokens.
      * @param tokens Array of token addresses.
-     * @return results Array of TokenInfoResult structures.
+     * @return results Array of basefoResult structures.
      */
-    function getTokenInfo(address[] calldata tokens) external view returns (TokenInfoResult[] memory results) {
-        results = new TokenInfoResult[](tokens.length);
+    function getbasefo(address[] calldata tokens) external view returns (basefoResult[] memory results) {
+        results = new basefoResult[](tokens.length);
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 t = IERC20(tokens[i]);
-            results[i] = TokenInfoResult({
+            results[i] = basefoResult({
                 symbol: t.symbol(),
                 name: t.name(),
                 decimals: t.decimals(),
@@ -523,7 +533,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     }
 
     /**
-     * @notice Allows the admin to withdraw collected fees for a given token (tokenOut).
+     * @notice Allows the admin to withdraw collected fees for a given token (quote).
      * @param token The token address.
      */
     function withdrawFees(address token) external onlyOwner {

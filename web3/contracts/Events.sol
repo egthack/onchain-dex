@@ -9,8 +9,8 @@ event TraderApprovalSet(address indexed user, address indexed trader, bool appro
 event TradeExecuted(
     uint256 indexed makerOrderId,
     uint256 indexed takerOrderId,
-    address tokenIn,
-    address tokenOut,
+    address base,
+    address quote,
     uint256 price,
     uint256 amount,
     uint256 makerFee,
@@ -20,12 +20,12 @@ event OrderPlaced(
     uint256 indexed orderId,
     address indexed user,
     IMatchingEngine.OrderSide side,
-    address tokenIn,
-    address tokenOut,
+    address base,
+    address quote,
     uint256 price,
     uint256 amount
 );
 event OrderCancelled(uint256 indexed orderId, address indexed user);
-event PairAdded(bytes32 indexed pairId, address tokenIn, address tokenOut, uint256[2] decimals, uint256 timestamp);
+event PairAdded(bytes32 indexed pairId, address base, address quote, uint256[2] decimals, uint256 timestamp);
 event FeeRatesUpdated(uint256 makerFeeRate, uint256 takerFeeRate);
 event FeesWithdrawn(address indexed token, uint256 makerFeeAmount, uint256 takerFeeAmount);

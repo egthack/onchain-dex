@@ -10,8 +10,8 @@ library VaultLib {
     struct TradeRequest {
         address user; // The asset owner executing the trade.
         IMatchingEngine.OrderSide side; // Buy (0) or Sell (1).
-        address tokenIn; // The token being sold.
-        address tokenOut; // The token being bought.
+        address base; // The token being sold.
+        address quote; // The token being bought.
         uint256 amount; // Amount to sell
         uint256 price; // The price of the order.
         bytes signature; // User's signature.
@@ -34,8 +34,8 @@ library VaultLib {
         bytes32 hash = keccak256(
             abi.encodePacked(
                 req.user,
-                req.tokenIn,
-                req.tokenOut,
+                req.base,
+                req.quote,
                 req.amount,
                 req.price,
                 req.side
