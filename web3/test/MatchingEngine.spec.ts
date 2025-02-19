@@ -2,7 +2,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 import { MatchingEngine, TradingVault, MockERC20 } from "../typechain-types";
 import { Signer } from "ethers";
-import { createTradeRequest, getTradeExecutedEvents } from "./helpers/tradeHelper";
+import { createTradeRequest, getTokenBalances, getTradeExecutedEvents } from "./helpers/tradeHelper";
 
 
 
@@ -256,14 +256,12 @@ describe("MatchingEngine", function () {
 
 
       // user baseToken: 10100, quoteToken: 9800
-      const userBalanceBase = await vault.getBalance(await user.getAddress(), await baseToken.getAddress());
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseToken, quoteToken);
       expect(userBalanceBase).to.equal(10100);
-      const userBalanceQuote = await vault.getBalance(await user.getAddress(), await quoteToken.getAddress());
       expect(userBalanceQuote).to.equal(9800);
       // trader baseToken: 9900, quoteToken: 10200
-      const traderBalanceBase = await vault.getBalance(await trader.getAddress(), await baseToken.getAddress());
+      const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseToken, quoteToken);
       expect(traderBalanceBase).to.equal(9900);
-      const traderBalanceQuote = await vault.getBalance(await trader.getAddress(), await quoteToken.getAddress());
       expect(traderBalanceQuote).to.equal(10200);
     });
 
@@ -302,52 +300,76 @@ describe("MatchingEngine", function () {
       expect(order2.active).to.equal(false);
 
       // user baseToken: 9900, quoteToken: 10200
-      const userBalanceBase = await vault.getBalance(await user.getAddress(), await baseToken.getAddress());  
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseToken, quoteToken);
       expect(userBalanceBase).to.equal(9900);  
-      const userBalanceQuote = await vault.getBalance(await user.getAddress(), await quoteToken.getAddress());
       expect(userBalanceQuote).to.equal(10200);
       // trader baseToken: 10100, quoteToken: 9800
-      const traderBalanceBase = await vault.getBalance(await trader.getAddress(), await baseToken.getAddress());
+      const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseToken, quoteToken);
       expect(traderBalanceBase).to.equal(10100); 
-      const traderBalanceQuote = await vault.getBalance(await trader.getAddress(), await quoteToken.getAddress());
       expect(traderBalanceQuote).to.equal(9800);
     });
 
-    // TODO: 残っているものの繰り返しマッチング
-    // it('should match orders with partial fill', async function () {
-    //   const tradeRequest1 = await createTradeRequest({
-    //     user: user,
-    //     base: baseToken,
-    //     quote: quoteToken,
-    //     side: 0,
-    //     amount: 100,
-    //     price: 1
-    //   });
-    //   await vault.connect(user).executeTradeBatch([tradeRequest1]);
+    // 部分マッチング
+    it('should match orders with partial fill', async function () {
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseToken,
+        quote: quoteToken,
+        side: 0,
+        amount: 100,
+        price: 1
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-    //   const tradeRequest2 = await createTradeRequest({
-    //     user: trader,
-    //     base: baseToken,
-    //     quote: quoteToken,
-    //     side: 1,
-    //     amount: 50,
-    //     price: 1
-    //   });
-    //   await vault.connect(trader).executeTradeBatch([tradeRequest2]);
-    //   const tradeExecutedEvents = await getTradeExecutedEvents(matchingEngine);
-    //   expect(tradeExecutedEvents.length).to.equal(1);
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseToken,
+        quote: quoteToken,
+        side: 1,
+        amount: 50,
+        price: 1
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
+      const tradeExecutedEvents = await getTradeExecutedEvents(matchingEngine);
+      expect(tradeExecutedEvents.length).to.equal(1);
 
-    //   // user baseToken: 10200, quoteToken: 9800
-    //   const userBalanceBase = await vault.getBalance(await user.getAddress(), await baseToken.getAddress());
-    //   expect(userBalanceBase).to.equal(10200);
-    //   const userBalanceQuote = await vault.getBalance(await user.getAddress(), await quoteToken.getAddress());
-    //   expect(userBalanceQuote).to.equal(9800);
-    //   // trader baseToken: 9900, quoteToken: 10100
+      // user baseToken: 10050, quoteToken: 9900
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseToken, quoteToken);
+      expect(userBalanceBase).to.equal(10050);
+      expect(userBalanceQuote).to.equal(9900);
+      // trader baseToken: 9950, quoteToken: 10050
+      const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      expect(traderBalanceBase).to.equal(9950);
+      expect(traderBalanceQuote).to.equal(10050);
       
-    // });
+
+      // 繰り返しマッチング
+      const tradeRequest3 = await createTradeRequest({
+        user: trader,
+        base: baseToken,
+        quote: quoteToken,
+        side: 1,
+        amount: 50,
+        price: 1
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest3]);
+      
+      const tradeExecutedEvents2 = await getTradeExecutedEvents(matchingEngine);
+      expect(tradeExecutedEvents2.length).to.equal(2);
+
+      // user baseToken: 10100, quoteToken: 9900
+      const { userBalanceBase: userBalanceBase2, userBalanceQuote: userBalanceQuote2 } = await getTokenBalances(vault, user, baseToken, quoteToken);
+      expect(userBalanceBase2).to.equal(10100);
+      expect(userBalanceQuote2).to.equal(9900); 
+
+      // trader baseToken: 9900, quoteToken: 10100
+      const { userBalanceBase: traderBalanceBase2, userBalanceQuote: traderBalanceQuote2 } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      expect(traderBalanceBase2).to.equal(9900);
+      expect(traderBalanceQuote2).to.equal(10100);
+    });
 
     // TODO: 成り行き注文
-
+    // TODO: 繰り返しマッチング
     // TODO: 手数料計算
     // TODO: 順番のテスト
   });

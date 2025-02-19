@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { MatchingEngine, MockERC20 } from "../../typechain-types";
+import { MatchingEngine, MockERC20, TradingVault } from "../../typechain-types";
 import { Filter, Signer } from "ethers";
 export interface TradeRequest {
   user: string;
@@ -57,4 +57,22 @@ export async function getTradeExecutedEvents(
   const latestBlock = await ethers.provider.getBlockNumber();
   const tradeExecutedEvents = await matchingEngine.queryFilter(tradeExecutedFilter, 0, latestBlock);
   return tradeExecutedEvents;
+}
+
+export async function getTokenBalances(
+  vault: TradingVault,
+  user: Signer,
+  base: MockERC20,
+  quote: MockERC20
+) {
+  const userAddress = await user.getAddress();
+  const baseAddress = await base.getAddress();
+  const quoteAddress = await quote.getAddress();
+
+  const userBalanceBase = await vault.getBalance(userAddress, baseAddress);
+  const userBalanceQuote = await vault.getBalance(userAddress, quoteAddress);
+  return {
+    userBalanceBase,
+    userBalanceQuote
+  };
 }
