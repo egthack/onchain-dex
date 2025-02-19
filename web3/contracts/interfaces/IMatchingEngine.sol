@@ -24,12 +24,11 @@ interface IMatchingEngine {
     
     /**
      * @notice Places an order on the matching engine.
-     * @param base The token being sold.
-     * @param quote The token being bought.
+     * @param base The Quote Tokeneing sold.
+     * @param quote The Quote Tokeneing bought.
      * @param side The order side.
      * @param amount The amount of base to sell.
      * @param price The price of the order.
-     * @return outAmount The actual amount of quote received after matching.
      */
     function placeOrder(
         address user,
@@ -38,7 +37,7 @@ interface IMatchingEngine {
         OrderSide side,
         uint256 amount,
         uint256 price
-    ) external returns (uint256 outAmount);
+    ) external;
 
     /**
      * @notice Returns the order information for the specified orderId

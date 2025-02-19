@@ -12,6 +12,8 @@ interface ITradingVault {
     function executeTradeBatch(
         VaultLib.TradeRequest[] calldata trades
     ) external payable;
-        function updateMakerBalance(address maker, address token, uint256 amount) external;
 
+    function deductBalance(address user, address token, uint256 amount) external;
+
+    function creditBalance(address user, address token, uint256 amount) external;
 }

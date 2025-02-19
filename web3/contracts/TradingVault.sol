@@ -23,6 +23,11 @@ contract TradingVault is ITradingVault, Ownable {
         engine = IMatchingEngine(_engine);
     }
 
+    modifier onlyMatchingEngine() {
+        require(msg.sender == address(engine), "Only MatchingEngine can call this function");
+        _;
+    }
+
     /**
      * @notice Deposits tokens into the Vault.
      */
@@ -61,13 +66,17 @@ contract TradingVault is ITradingVault, Ownable {
     }
 
     /**
-     * @notice Updates the balance for a given maker and token.
-     * @param maker The address of the maker.
-     * @param token The address of the token.
-     * @param amount The amount of tokens to update the balance by.
+     * @notice Deducts the balance for a given user and token.
      */
-    function updateMakerBalance(address maker, address token, uint256 amount) external {
-        balances[maker][token] += amount;
+    function deductBalance(address user, address token, uint256 amount) external onlyMatchingEngine {
+        balances[user][token] -= amount;
+    }
+
+    /**
+     * @notice Credits the balance for a given user and token.
+     */
+    function creditBalance(address user, address token, uint256 amount) external onlyMatchingEngine {
+        balances[user][token] += amount;
     }
 
     /**
@@ -80,14 +89,13 @@ contract TradingVault is ITradingVault, Ownable {
         // Check trade request authorization.
         VaultLib.checkTradeRequest(req);
         
-        uint256 outAmount;
-        if (req.side == IMatchingEngine.OrderSide.Buy) { // Buy order: use quote to pay
-            // In a buy order, the user pays using quote tokens.
+        if (req.side == IMatchingEngine.OrderSide.Buy) { // Buy order: use quote tokens to pay
+            // In a buy order, the user pays using Quote Tokens.
             uint256 requiredQuote = req.amount * req.price;
             require(balances[req.user][req.quote] >= requiredQuote, "Insufficient vault balance");
             balances[req.user][req.quote] -= requiredQuote;
             
-            outAmount = engine.placeOrder(
+            engine.placeOrder(
                 req.user,
                 req.base,
                 req.quote,
@@ -95,13 +103,11 @@ contract TradingVault is ITradingVault, Ownable {
                 req.amount,
                 req.price
             );
-            // For buy order, user receives base tokens.
-            balances[req.user][req.base] += outAmount;
         } else { // Sell order: use base as collateral
             require(balances[req.user][req.base] >= req.amount, "Insufficient vault balance");
             balances[req.user][req.base] -= req.amount;
             
-            outAmount = engine.placeOrder(
+            engine.placeOrder(
                 req.user,
                 req.base,
                 req.quote,
@@ -109,8 +115,6 @@ contract TradingVault is ITradingVault, Ownable {
                 req.amount,
                 req.price
             );
-            // For sell order, user receives quote tokens.
-            balances[req.user][req.quote] += outAmount;
         }
     }
 

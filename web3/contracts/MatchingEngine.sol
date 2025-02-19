@@ -5,7 +5,7 @@ import "hardhat/console.sol";
 import "./library/RedBlackTreeLib.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IMatchingEngine.sol";
-import "./Events.sol"; 
+import "./Events.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/ITradingVault.sol";
 
@@ -20,8 +20,8 @@ contract MatchingEngine is IMatchingEngine, Ownable {
 
     // OrderBook structure for a specific trading pair.
     struct OrderBook {
-        RedBlackTreeLib.Tree buyTree;   // Buy orders (max price first).
-        RedBlackTreeLib.Tree sellTree;  // Sell orders (min price first).
+        RedBlackTreeLib.Tree buyTree; // Buy orders (max price first).
+        RedBlackTreeLib.Tree sellTree; // Sell orders (min price first).
         // Mapping: price level => array of order IDs (FIFO).
         mapping(uint256 => uint256[]) buyOrdersAtPrice;
         mapping(uint256 => uint256[]) sellOrdersAtPrice;
@@ -31,6 +31,12 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     mapping(bytes32 => OrderBook) internal orderBooks;
     // Mapping: order ID => Order.
     mapping(uint256 => Order) internal orders;
+    // 新たに maker の残高更新量を記録する構造体
+    struct MakerChange {
+        address maker;
+        address token;
+        uint256 amount;
+    }
     uint256 public nextOrderId;
 
     // Fee rates in basis points (e.g., 10 = 0.1%).
@@ -42,10 +48,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
 
     // Array of pair IDs for front-end iteration.
     bytes32[] public pairKeys;
-    // Mapping: pair ID => Pair (token addresses and decimals).
+    // Mapping: pair ID => Pair (Base Tokenddresses and decimals).
     struct Pair {
-        address[2] tokenz;       // [base, quote].
-        uint256[2] decimals;     // [base decimals, quote decimals].
+        address[2] tokenz; // [base, quote].
+        uint256[2] decimals; // [base decimals, quote decimals].
     }
     mapping(bytes32 => Pair) internal pairs;
 
@@ -54,16 +60,20 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     address public admin;
     address public vaultAddress;
     ITradingVault public _tradingVault;
-    constructor(uint256 _makerFeeRate, uint256 _takerFeeRate) Ownable(msg.sender) {
+
+    constructor(
+        uint256 _makerFeeRate,
+        uint256 _takerFeeRate
+    ) Ownable(msg.sender) {
         admin = msg.sender;
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
     }
 
     /** @notice Sets the vault address.
-      * Only the owner can set it.
-      * @param _vault The address of the TradingVault contract.
-      */
+     * Only the owner can set it.
+     * @param _vault The address of the TradingVault contract.
+     */
     function setVaultAddress(address _vault) external onlyOwner {
         vaultAddress = _vault;
         _tradingVault = ITradingVault(_vault);
@@ -87,8 +97,8 @@ contract MatchingEngine is IMatchingEngine, Ownable {
 
     /**
      * @notice Adds a new trading pair.
-     * @param base Token being sold (base).
-     * @param quote Token being bought (quote).
+     * @param base token being sold (base).
+     * @param quote token being bought (quote).
      * @param decimalsBase Decimals for base.
      * @param decimalsQuote Decimals for quote.
      */
@@ -102,19 +112,24 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
         pairs[pairId] = Pair([base, quote], [decimalsBase, decimalsQuote]);
         pairKeys.push(pairId);
-        emit PairAdded(pairId, base, quote, [decimalsBase, decimalsQuote], block.timestamp);
+        emit PairAdded(
+            pairId,
+            base,
+            quote,
+            [decimalsBase, decimalsQuote],
+            block.timestamp
+        );
     }
 
     // ---------------- Order Placement & Matching ----------------
 
     /**
      * @notice Places a new order and attempts immediate matching.
-     * @param base Token being sold.
-     * @param quote Token being bought.
+     * @param base token being sold (base).
+     * @param quote token being bought (quote).
      * @param side Order side (Buy or Sell).
      * @param price Order price (quote per base).
      * @param amount Order amount.
-     * @return executedAmount The amount executed from the order.
      *
      * Note: Funds must be locked in the Vault externally before placing the order.
      */
@@ -122,10 +137,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         address user,
         address base,
         address quote,
-        OrderSide side,        
+        OrderSide side,
         uint256 amount,
         uint256 price
-    ) external onlyVault returns (uint256 executedAmount) {
+    ) external onlyVault {
         require(amount > 0, "Amount must be > 0");
         require(price > 0, "Price must be > 0");
 
@@ -158,8 +173,6 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         }
         emit OrderPlaced(orderId, user, side, base, quote, price, amount);
         _matchOrder(pairId, orderId);
-        executedAmount = amount - orders[orderId].amount;
-        return executedAmount;
     }
 
     /**
@@ -178,9 +191,8 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         uint256 remaining = incoming.amount;
         uint256 iterations = 0;
 
-        // TODO: makerのどのアドレスのどのトークンがどれだけ変動したか記録し、最後にupdateMakerBalanceを呼び出す
         if (incoming.side == OrderSide.Buy) {
-            // Match buy order against sell orders with price <= incoming.price.
+            // Buy 注文の場合、すでに板にある Sell 注文とマッチさせる
             uint256 bestSellPrice = ob.sellTree.getMin();
             while (
                 remaining > 0 &&
@@ -198,11 +210,9 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                         sellList.pop();
                         continue;
                     }
-                    uint256 fill = remaining < sellOrder.amount ? remaining : sellOrder.amount;
-
-                    // tradeVolume = fill * bestSellPrice; // In quote units.
-                    uint256 makerFee = (fill * bestSellPrice * makerFeeRate) / 10000;
-                    uint256 takerFee = (fill * bestSellPrice * takerFeeRate) / 10000;
+                    uint256 fill = remaining < sellOrder.amount
+                        ? remaining
+                        : sellOrder.amount;
 
                     sellOrder.amount -= fill;
                     remaining -= fill;
@@ -213,23 +223,32 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    // Calculate the amount the maker (resting sell order owner) should receive in quote tokens.
-                    // makerReceived = (fill × bestSellPrice) – makerFee
-                    uint256 makerReceived = (fill * bestSellPrice) - makerFee;
-                    // Update maker's balance via TradingVault
-                    _tradingVault.updateMakerBalance(sellOrder.user, incoming.quote, makerReceived);
-                    makerFeesCollected[incoming.quote] += makerFee;
-                    takerFeesCollected[incoming.quote] += takerFee;
+                    
+            
+                    // ■ 想定するトークンフロー
+                    // • 入力注文（taker：Buy）の場合：
+                    //    - taker は base トークンを受け取る (fill)
+                    //    - taker は quote トークンを差し引き (fill × bestSellPrice)　-> lock済みなのでここでは処理しない
+                    // • 対する resting 注文（maker：Sell）の場合：
+                    //    - maker は quote トークンを受け取る (fill × bestSellPrice)
+                    //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
+                    
+                    _tradingVault.creditBalance(incoming.user, incoming.base, fill);
+
+                    _tradingVault.creditBalance(sellOrder.user, incoming.quote, fill * bestSellPrice);
+                    
+                    
+                    // --- ここまで ---
 
                     emit TradeExecuted(
-                        orderId,         // Buy order ID (taker)
-                        sellOrderId,     // Sell order ID (maker)
+                        orderId,          // taker の注文 ID
+                        sellOrderId,      // maker の注文 ID
                         incoming.base,
                         incoming.quote,
                         bestSellPrice,
                         fill,
-                        makerFee,
-                        takerFee
+                        0, // makerFee
+                        0  // takerFee
                     );
                 }
                 if (sellList.length == 0) {
@@ -238,7 +257,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                 bestSellPrice = ob.sellTree.getMin();
             }
         } else {
-            // For sell orders, match against buy orders with price >= incoming.price.
+            // Sell 注文の場合、すでに板にある Buy 注文とマッチさせる
             uint256 bestBuyPrice = ob.buyTree.getMax();
             while (
                 remaining > 0 &&
@@ -256,9 +275,9 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                         buyList.pop();
                         continue;
                     }
-                    uint256 fill = remaining < buyOrder.amount ? remaining : buyOrder.amount;
-                    uint256 makerFee = (fill * bestBuyPrice * makerFeeRate) / 10000;
-                    uint256 takerFee = (fill * bestBuyPrice * takerFeeRate) / 10000;
+                    uint256 fill = remaining < buyOrder.amount
+                        ? remaining
+                        : buyOrder.amount;
 
                     buyOrder.amount -= fill;
                     remaining -= fill;
@@ -269,23 +288,28 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    // Calculate the amount the maker (resting buy order owner) should receive in base tokens.
-                    // makerReceived = (fill × bestBuyPrice) – makerFee
-                    uint256 makerReceived = (fill * bestBuyPrice) - makerFee;
-                    // Update maker's balance via TradingVault
-                    _tradingVault.updateMakerBalance(buyOrder.user, incoming.base, makerReceived);
-                    makerFeesCollected[incoming.base] += makerFee;
-                    takerFeesCollected[incoming.base] += takerFee;
+                    
+                    // ■ 想定するトークンフロー
+                    // • 入力注文（taker：Sell）の場合：
+                    //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
+                    //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
+                    // • 対する resting 注文（maker：Buy）の場合：
+                    //    - maker は quote トークンを差し引き (fill × bestBuyPrice)　-> lock済みなのでここでは処理しない
+                    //    - maker は base トークンを受け取る (fill)                    
+                    _tradingVault.creditBalance(incoming.user, incoming.quote, fill * bestBuyPrice);
+
+                    _tradingVault.creditBalance(buyOrder.user, incoming.base, fill);
+                    // --- ここまで ---
 
                     emit TradeExecuted(
-                        buyOrderId,      // Buy order ID (maker)
-                        orderId,         // Sell order ID (taker)
+                        buyOrderId,       // maker の注文 ID
+                        orderId,          // taker の注文 ID
                         incoming.base,
                         incoming.quote,
                         bestBuyPrice,
                         fill,
-                        makerFee,
-                        takerFee
+                        0, // makerFee
+                        0  // takerFee
                     );
                 }
                 if (buyList.length == 0) {
@@ -339,7 +363,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         uint totalSupply;
     }
 
-    struct TokenBalanceAndAllowanceResult {
+    struct quotebaseTokenlanceAndAllowanceResult {
         uint balance;
         uint allowance;
     }
@@ -370,7 +394,9 @@ contract MatchingEngine is IMatchingEngine, Ownable {
      * @param orderId The ID of the order to retrieve.
      * @return order The order information.
      */
-    function getOrder(uint256 orderId) external view returns (Order memory order) {
+    function getOrder(
+        uint256 orderId
+    ) external view returns (Order memory order) {
         return orders[orderId];
     }
 
@@ -453,12 +479,20 @@ contract MatchingEngine is IMatchingEngine, Ownable {
      * @param i Index of the pair.
      * @return pairResult The pair result structure.
      */
-    function getPair(uint i) external view returns (PairResult memory pairResult) {
+    function getPair(
+        uint i
+    ) external view returns (PairResult memory pairResult) {
         require(i < pairKeys.length, "Index out of range");
         bytes32 pairId = pairKeys[i];
         Pair memory p = pairs[pairId];
-        BestOrderResult memory bestBuy = getBestOrder(pairId, IMatchingEngine.OrderSide.Buy);
-        BestOrderResult memory bestSell = getBestOrder(pairId, IMatchingEngine.OrderSide.Sell);
+        BestOrderResult memory bestBuy = getBestOrder(
+            pairId,
+            IMatchingEngine.OrderSide.Buy
+        );
+        BestOrderResult memory bestSell = getBestOrder(
+            pairId,
+            IMatchingEngine.OrderSide.Sell
+        );
         pairResult = PairResult({
             pairId: pairId,
             tokenz: [p.tokenz[0], p.tokenz[1]],
@@ -474,7 +508,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
      * @param offset Starting index.
      * @return pairResults Array of PairResult structures.
      */
-    function getPairs(uint count, uint offset) external view returns (PairResult[] memory pairResults) {
+    function getPairs(
+        uint count,
+        uint offset
+    ) external view returns (PairResult[] memory pairResults) {
         require(offset < pairKeys.length, "Offset out of range");
         uint256 len = (offset + count > pairKeys.length)
             ? pairKeys.length - offset
@@ -487,10 +524,12 @@ contract MatchingEngine is IMatchingEngine, Ownable {
 
     /**
      * @notice Returns token information for a list of tokens.
-     * @param tokens Array of token addresses.
+     * @param tokens Array of Base Tokenddresses.
      * @return results Array of basefoResult structures.
      */
-    function getbasefo(address[] calldata tokens) external view returns (basefoResult[] memory results) {
+    function getbasefo(
+        address[] calldata tokens
+    ) external view returns (basefoResult[] memory results) {
         results = new basefoResult[](tokens.length);
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 t = IERC20(tokens[i]);
@@ -504,20 +543,20 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     }
 
     /**
-     * @notice Returns token balance and allowance for a list of owners and tokens.
+     * @notice Returns Quote Tokenalance and allowance for a list of owners and tokens.
      * @param owners Array of owner addresses.
-     * @param tokens Array of token addresses (must be same length as owners).
-     * @return results Array of TokenBalanceAndAllowanceResult structures.
+     * @param tokens Array of Base Tokenddresses (must be same length as owners).
+     * @return results Array of quotebaseTokenlanceAndAllowanceResult structures.
      */
-    function getTokenBalanceAndAllowance(
+    function getquotebaseTokenlanceAndAllowance(
         address[] calldata owners,
         address[] calldata tokens
-    ) external view returns (TokenBalanceAndAllowanceResult[] memory results) {
+    ) external view returns (quotebaseTokenlanceAndAllowanceResult[] memory results) {
         require(owners.length == tokens.length, "Length mismatch");
-        results = new TokenBalanceAndAllowanceResult[](owners.length);
+        results = new quotebaseTokenlanceAndAllowanceResult[](owners.length);
         for (uint256 i = 0; i < owners.length; i++) {
             IERC20 t = IERC20(tokens[i]);
-            results[i] = TokenBalanceAndAllowanceResult({
+            results[i] = quotebaseTokenlanceAndAllowanceResult({
                 balance: t.balanceOf(owners[i]),
                 allowance: t.allowance(owners[i], address(this))
             });
@@ -531,7 +570,10 @@ contract MatchingEngine is IMatchingEngine, Ownable {
      * @param _makerFeeRate New maker fee rate in basis points.
      * @param _takerFeeRate New taker fee rate in basis points.
      */
-    function setFeeRates(uint256 _makerFeeRate, uint256 _takerFeeRate) external onlyOwner {
+    function setFeeRates(
+        uint256 _makerFeeRate,
+        uint256 _takerFeeRate
+    ) external onlyOwner {
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
         emit FeeRatesUpdated(_makerFeeRate, _takerFeeRate);
@@ -539,7 +581,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
 
     /**
      * @notice Allows the admin to withdraw collected fees for a given token (quote).
-     * @param token The token address.
+     * @param token The Base Tokenddress.
      */
     function withdrawFees(address token) external onlyOwner {
         uint256 makerAmount = makerFeesCollected[token];

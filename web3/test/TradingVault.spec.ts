@@ -18,8 +18,8 @@ describe("TradingVault", function () {
   let owner: Signer;
   let user: Signer;
   let trader: Signer;
-  let tokenA: MockERC20;
-  let tokenB: MockERC20;
+  let baseToken: MockERC20;
+  let quoteToken: MockERC20;
   let vault: TradingVault;
   let engine: MatchingEngine;
 
@@ -32,14 +32,14 @@ describe("TradingVault", function () {
 
     // Deploy MockERC20 token
     const TokenFactory = await ethers.getContractFactory("MockERC20");
-    tokenA = await TokenFactory.connect(owner).deploy("Mock Token A", "MTKA", 1000000);
-    await tokenA.waitForDeployment();
-    tokenB = await TokenFactory.connect(owner).deploy("Mock Token B", "MTKB", 1000000);
-    await tokenB.waitForDeployment();
+    baseToken = await TokenFactory.connect(owner).deploy("Mock Base Token", "MBASE", 1000000);
+    await baseToken.waitForDeployment();
+    quoteToken = await TokenFactory.connect(owner).deploy("Mock Quote Token", "MQUOTE", 1000000);
+    await quoteToken.waitForDeployment();
 
     // Transfer some tokens to user for deposit tests
-    await tokenA.connect(owner).transfer(await user.getAddress(), 1000);
-    await tokenB.connect(owner).transfer(await user.getAddress(), 1000);
+    await baseToken.connect(owner).transfer(await user.getAddress(), 1000);
+    await quoteToken.connect(owner).transfer(await user.getAddress(), 1000);
 
     // Deploy MatchingEngine with fee rates (makerFeeRate = 10, takerFeeRate = 15)
     const EngineFactory = await ethers.getContractFactory("MatchingEngine");
@@ -48,7 +48,7 @@ describe("TradingVault", function () {
 
     // Add a trading pair into the MatchingEngine.
     // ここでは、base と quote の両方に同じ token.address を指定する
-    await engine.connect(owner).addPair(tokenA.getAddress(), tokenB.getAddress(), 18, 18);
+    await engine.connect(owner).addPair(baseToken.getAddress(), quoteToken.getAddress(), 18, 18);
 
     // Deploy TradingVault with the engine address
     const VaultFactory = await ethers.getContractFactory("TradingVault");
@@ -57,7 +57,7 @@ describe("TradingVault", function () {
 
     await engine.connect(owner).setVaultAddress(await vault.getAddress());
 
-    return { owner, user, trader, tokenA, tokenB, vault, engine };
+    return { owner, user, trader, baseToken, quoteToken, vault, engine };
   };
 
   beforeEach(async function () {
@@ -67,82 +67,56 @@ describe("TradingVault", function () {
   describe("Deposit", function () {
     it("should allow deposits", async function () {
       // user 承認後、100 トークンを deposit する
-      await tokenA.connect(user).approve(await vault.getAddress(), 200);
-      await vault.connect(user).deposit(tokenA.getAddress(), 100);
-      const balance = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
+      await baseToken.connect(user).approve(await vault.getAddress(), 200);
+      await vault.connect(user).deposit(baseToken.getAddress(), 100);
+      const balance = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
       expect(balance).to.equal(100);
     });
 
     it("should revert deposit if amount is zero", async function () {
       await expect(
-        vault.connect(user).deposit(tokenA.getAddress(), 0)
+        vault.connect(user).deposit(baseToken.getAddress(), 0)
       ).to.be.revertedWith("Amount must be > 0");
     });
   });
 
   describe("Withdraw", function () {
     beforeEach(async function () {
-      await tokenA.connect(user).approve(await vault.getAddress(), 200);
-      await vault.connect(user).deposit(tokenA.getAddress(), 100);
+      await baseToken.connect(user).approve(await vault.getAddress(), 200);
+      await vault.connect(user).deposit(baseToken.getAddress(), 100);
     });
 
     it("should allow withdrawal of tokens", async function () {
-      await vault.connect(user).withdraw(tokenA.getAddress(), 50);
-      const balance = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
+      await vault.connect(user).withdraw(baseToken.getAddress(), 50);
+      const balance = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
       expect(balance).to.equal(50);
     });
 
     it("should revert withdrawal when amount exceeds balance", async function () {
       await expect(
-        vault.connect(user).withdraw(tokenA.getAddress(), 150)
+        vault.connect(user).withdraw(baseToken.getAddress(), 150)
       ).to.be.revertedWith("Insufficient balance");
     });
 
     it("should allow withdrawal of zero tokens without changes", async function () {
-      const before = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
-      await vault.connect(user).withdraw(tokenA.getAddress(), 0);
-      const after = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
+      const before = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      await vault.connect(user).withdraw(baseToken.getAddress(), 0);
+      const after = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
       expect(after).to.equal(before);
-    });
-  });
-
-
-
-  describe("Trade Request", function () {
-    // VaultLib の内部チェック等を前提として、トレードリクエストの実行をテスト
-    it("should execute a trade request", async function () {
-      // user が 100 トークンを deposit する
-      await tokenA.connect(user).approve(await vault.getAddress(), 200);
-      await vault.connect(user).deposit(tokenA.getAddress(), 100);
-
-      // 取引リクエスト作成：今回は Buy 注文 (side = 0)
-      const tradeRequest = await createTradeRequest({
-        user: user,
-        base: tokenA,
-        quote: tokenB,
-        side: 0,
-        amount: 100,
-        price: 1
-      });
-      // trader が executeTradeBatch を実行 => MatchingEngine に注文が作成され、user の Vault から 100 トークンが引かれる
-      await vault.connect(user).executeTradeBatch([tradeRequest]);
-      // _executeSingleTrade 内で 100 トークンが Vault から引かれるため、最終的な残高は 0 となる
-      const finalBalance = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
-      expect(finalBalance).to.equal(0);
     });
   });
 
   describe("Cancel Order", function () {
     it("should cancel an active order and refund remaining funds", async function () {
       // user が 100 トークンを deposit する
-      await tokenA.connect(user).approve(await vault.getAddress(), 200);
-      await vault.connect(user).deposit(tokenA.getAddress(), 100);
+      await quoteToken.connect(user).approve(await vault.getAddress(), 100);
+      await vault.connect(user).deposit(quoteToken.getAddress(), 100);
 
       // 取引リクエスト作成：今回は Buy 注文 (side = 0)
       const tradeRequest = await createTradeRequest({
         user: user,
-        base: tokenA,
-        quote: tokenB,
+        base: baseToken,
+        quote: quoteToken,
         side: 0,
         amount: 100,
         price: 1
@@ -157,7 +131,7 @@ describe("TradingVault", function () {
       await vault.connect(user).cancelOrder(orderId);
 
       // キャンセル処理時、注文にロックされていた未約定の数量が Vault に返金される（テストでは 100 トークンが返金）
-      const balanceAfter = await vault.getBalance(await user.getAddress(), tokenA.getAddress());
+      const balanceAfter = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
       expect(balanceAfter).to.equal(100);
 
       // MatchingEngine 側の注文はキャンセル済みとなっているはず

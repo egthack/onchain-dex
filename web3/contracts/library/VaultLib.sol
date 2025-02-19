@@ -10,8 +10,8 @@ library VaultLib {
     struct TradeRequest {
         address user; // The asset owner executing the trade.
         IMatchingEngine.OrderSide side; // Buy (0) or Sell (1).
-        address base; // The token being sold.
-        address quote; // The token being bought.
+        address base; // The Quote Tokeneing sold.
+        address quote; // The Quote Tokeneing bought.
         uint256 amount; // Amount to sell
         uint256 price; // The price of the order.
         bytes signature; // User's signature.
