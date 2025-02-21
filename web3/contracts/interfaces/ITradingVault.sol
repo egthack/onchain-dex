@@ -25,5 +25,10 @@ interface ITradingVault {
         uint256 amount
     ) external;
 
+    /**
+     * @notice Returns the locked amount for a given order
+     * @param orderId The order ID
+     * @return The locked amount
+     */
     function getLockedAmount(uint256 orderId) external view returns (uint256);
 }

@@ -103,11 +103,9 @@ contract TradingVault is ITradingVault, Ownable {
      *      The MatchingEngine returns the output amount (quote) after matching.
      */
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
-        // Check trade request authorization.
         VaultLib.checkTradeRequest(req);
 
         uint256 lockedAmount = _lockTokens(req);
-
         uint256 orderId = engine.placeOrder(
             req.user,
             req.base,
@@ -116,9 +114,10 @@ contract TradingVault is ITradingVault, Ownable {
             req.amount,
             req.price
         );
-
-        // ロックした金額を保存
         lockedAmounts[orderId] = lockedAmount;
+
+        // マッチング処理を分離
+        engine.matchOrder(orderId);
     }
 
     /**

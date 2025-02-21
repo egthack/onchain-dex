@@ -181,8 +181,12 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             }
         }
         emit OrderPlaced(orderId, user, side, base, quote, price, amount);
-        _matchOrder(pairId, orderId);
         return orderId;
+    }
+
+    function matchOrder(uint256 orderId) external onlyVault {
+        bytes32 pairId = getPairId(orders[orderId].base, orders[orderId].quote);
+        _matchOrder(pairId, orderId);
     }
 
     /**
@@ -200,6 +204,9 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         OrderBook storage ob = orderBooks[pairId];
         uint256 remaining = incoming.amount;
         uint256 iterations = 0;
+
+        // 注文の元の数量を保存
+        uint256 originalAmount = incoming.amount;
 
         if (incoming.side == OrderSide.Buy) {
             // Buy 注文の場合、すでに板にある Sell 注文とマッチさせる
@@ -346,21 +353,19 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         }
         incoming.amount = remaining;
 
-        // 成行注文の場合、残りの注文をキャンセル
+        // 成行注文の場合、残りの注文をキャンセルして返金
         if (incoming.price == 0) {
             if (remaining > 0) {
-                // 残りの注文をキャンセル
-                incoming.amount = incoming.amount - remaining;
                 incoming.active = false;
-
                 // 残りの資金を返却
                 if (incoming.side == OrderSide.Buy) {
-                    // 約定していない数量の割合を計算して返金
+                    // 約定していない数量の割合を計算して返金（quote token）
                     uint256 lockedAmount = _tradingVault.getLockedAmount(
                         orderId
                     );
+
                     uint256 refundAmount = (lockedAmount * remaining) /
-                        incoming.amount;
+                        originalAmount;
                     _tradingVault.creditBalance(
                         incoming.user,
                         incoming.quote,

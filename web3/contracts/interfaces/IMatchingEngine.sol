@@ -39,6 +39,12 @@ interface IMatchingEngine {
         uint256 price
     ) external returns (uint256 orderId);
 
+    /**
+     * @notice Matches an order on the matching engine.
+     * @param orderId The ID of the order to match.
+     */
+    function matchOrder(uint256 orderId) external;
+
     function getPairId(
         address base,
         address quote

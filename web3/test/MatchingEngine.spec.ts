@@ -520,8 +520,54 @@ describe("MatchingEngine", function () {
         } = await getTokenBalances(vault, trader, baseToken, quoteToken);
         // base: 9950(9900 + 50 returned), quote: 10100)
         expect(traderBalanceBase2).to.equal(9950);
-        expect(traderBalanceQuote2).to.equal(-10100);
+        expect(traderBalanceQuote2).to.equal(10100);
       });
+    });
+    it("should execute market sell order against existing sell orders and not match all", async function () {
+      // 指値売り注文を作成
+      const limitSellOrder = await createTradeRequest({
+        user: trader,
+        base: baseToken,
+        quote: quoteToken,
+        side: 1, // Sell
+        amount: 100,
+        price: 2,
+      });
+      await vault.connect(trader).executeTradeBatch([limitSellOrder]);
+      // 成行買い注文を実行
+      const marketSellOrder = await createTradeRequest({
+        user: user,
+        base: baseToken,
+        quote: quoteToken,
+        side: 0, // Buy
+        amount: 300,
+        price: 0, // Market order
+      });
+      await vault.connect(user).executeTradeBatch([marketSellOrder]);
+      // 約定確認
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(1);
+      // 残高確認
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseToken,
+        quoteToken
+      );
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+
+      // base: 9900(100 returned), quote: 10200(200 returned)
+      expect(userBalanceBase).to.equal(10100);
+      expect(userBalanceQuote).to.equal(9800);
+      // base: 10100(100 locked), quote: 9800(200 locked)
+      expect(traderBalanceBase).to.equal(9900);
+      expect(traderBalanceQuote).to.equal(10200);
     });
   });
 });
