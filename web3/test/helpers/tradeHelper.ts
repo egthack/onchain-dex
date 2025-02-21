@@ -1,6 +1,13 @@
 import { ethers } from "hardhat";
 import { MatchingEngine, MockERC20, TradingVault } from "../../typechain-types";
-import { Filter, Signer } from "ethers";
+import {
+  Contract,
+  ContractEventName,
+  EventFilter,
+  Filter,
+  Signer,
+} from "ethers";
+import { TypedContractEvent } from "../../typechain-types/common";
 export interface TradeRequest {
   user: string;
   base: string;
@@ -11,30 +18,35 @@ export interface TradeRequest {
   signature: string;
 }
 
-
-export async function createTradeRequest(
-  {
-    user,
-    base,
-    quote,
-    side,
-    amount,
-    price
-  }: {
-    user: Signer,
-    base: MockERC20,
-    quote: MockERC20,
-    side: number,
-    amount: number,
-    price: number
-  }): Promise<TradeRequest> {
+export async function createTradeRequest({
+  user,
+  base,
+  quote,
+  side,
+  amount,
+  price,
+}: {
+  user: Signer;
+  base: MockERC20;
+  quote: MockERC20;
+  side: number;
+  amount: number;
+  price: number;
+}): Promise<TradeRequest> {
   const userAddress = await user.getAddress();
 
   // 署名対象は、ユーザー、base、quote、amount、price、side を連結
   const hash = ethers.keccak256(
     ethers.solidityPacked(
       ["address", "address", "address", "uint256", "uint256", "uint8"],
-      [userAddress, await base.getAddress(), await quote.getAddress(), amount, price, side]
+      [
+        userAddress,
+        await base.getAddress(),
+        await quote.getAddress(),
+        amount,
+        price,
+        side,
+      ]
     )
   );
   // signMessage の引数はバイト列に変換
@@ -46,17 +58,17 @@ export async function createTradeRequest(
     amount: amount,
     price: price,
     side: side,
-    signature: signature
+    signature: signature,
   };
 }
 
-export async function getTradeExecutedEvents(
-  matchingEngine: MatchingEngine,
+export async function getContractEvents(
+  contract: MatchingEngine | TradingVault,
+  event: TypedContractEvent<any, any, any>
 ) {
-  const tradeExecutedFilter = matchingEngine.filters.TradeExecuted();
   const latestBlock = await ethers.provider.getBlockNumber();
-  const tradeExecutedEvents = await matchingEngine.queryFilter(tradeExecutedFilter, 0, latestBlock);
-  return tradeExecutedEvents;
+  const events = await contract.queryFilter(event, 0, latestBlock);
+  return events;
 }
 
 export async function getTokenBalances(
@@ -73,6 +85,6 @@ export async function getTokenBalances(
   const userBalanceQuote = await vault.getBalance(userAddress, quoteAddress);
   return {
     userBalanceBase,
-    userBalanceQuote
+    userBalanceQuote,
   };
 }
