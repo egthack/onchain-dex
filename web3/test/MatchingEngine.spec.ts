@@ -467,54 +467,61 @@ describe("MatchingEngine", function () {
     });
 
     describe("Market Orders", function () {
-      //   it("should execute market buy order against existing sell orders", async function () {
-      //     // 指値売り注文を作成
-      //     const limitSellOrder = await createTradeRequest({
-      //       user: trader,
-      //       base: baseToken,
-      //       quote: quoteToken,
-      //       side: 1, // Sell
-      //       amount: 100,
-      //       price: 2,
-      //     });
-      //     await vault.connect(trader).executeTradeBatch([limitSellOrder]);
-      //     // 成行買い注文を実行
-      //     const marketBuyOrder = await createTradeRequest({
-      //       user: user,
-      //       base: baseToken,
-      //       quote: quoteToken,
-      //       side: 0, // Buy
-      //       amount: 50,
-      //       price: 0, // Market order
-      //     });
-      //     await vault.connect(user).executeTradeBatch([marketBuyOrder]);
-      //     // 約定確認
-      //     const marketOrderExecutedEvents = await getContractEvents(
-      //       matchingEngine,
-      //       matchingEngine.filters.MarketOrderExecuted
-      //     );
-      //     expect(marketOrderExecutedEvents.length).to.equal(1);
-      //     const tradeExecutedEvents = await getContractEvents(
-      //       matchingEngine,
-      //       matchingEngine.filters.TradeExecuted
-      //     );
-      //     expect(tradeExecutedEvents.length).to.equal(1);
-      //     // 残高確認
-      //     const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
-      //       vault,
-      //       user,
-      //       baseToken,
-      //       quoteToken
-      //     );
-      //     expect(userBalanceBase).to.equal(10050);
-      //     expect(userBalanceQuote).to.equal(9900);
-      //     const {
-      //       userBalanceBase: traderBalanceBase,
-      //       userBalanceQuote: traderBalanceQuote,
-      //     } = await getTokenBalances(vault, trader, baseToken, quoteToken);
-      //     expect(traderBalanceBase).to.equal(9950);
-      //     expect(traderBalanceQuote).to.equal(10100);
-      //   });
+      it("should execute market buy order against existing sell orders", async function () {
+        // 指値売り注文を作成
+        const limitSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader).executeTradeBatch([limitSellOrder]);
+        // 成行買い注文を実行
+        const marketBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseToken,
+          quote: quoteToken,
+          side: 0, // Buy
+          amount: 50,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+        // 約定確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseToken,
+          quoteToken
+        );
+        // base: 10050(50 returned), quote: 9900(50 locked and 100 used(amount 50 * price 2))
+        expect(userBalanceBase).to.equal(10050);
+        expect(userBalanceQuote).to.equal(9900);
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+        // base: 9900(50 locked, 50 sold), quote: 10100(100 returned)
+        expect(traderBalanceBase).to.equal(9900);
+        expect(traderBalanceQuote).to.equal(10100);
+
+        // trader の50 locked 注文をキャンセルして返金される金額を確認
+        await vault.connect(trader).cancelOrder(0);
+        const {
+          userBalanceBase: traderBalanceBase2,
+          userBalanceQuote: traderBalanceQuote2,
+        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+        // base: 9950(9900 + 50 returned), quote: 10100)
+        expect(traderBalanceBase2).to.equal(9950);
+        expect(traderBalanceQuote2).to.equal(-10100);
+      });
     });
   });
 });

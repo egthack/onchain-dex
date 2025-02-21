@@ -93,6 +93,16 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         return keccak256(abi.encodePacked(base, quote));
     }
 
+    function getBestSellPrice(bytes32 pairId) external view returns (uint256) {
+        OrderBook storage ob = orderBooks[pairId];
+        return ob.sellTree.getMin();
+    }
+
+    function getBestBuyPrice(bytes32 pairId) external view returns (uint256) {
+        OrderBook storage ob = orderBooks[pairId];
+        return ob.buyTree.getMax();
+    }
+
     // ---------------- Pair Management ----------------
 
     /**
@@ -140,9 +150,8 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         OrderSide side,
         uint256 amount,
         uint256 price
-    ) external onlyVault {
+    ) external onlyVault returns (uint256) {
         require(amount > 0, "Amount must be > 0");
-        require(price > 0, "Price must be > 0");
 
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -173,6 +182,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         }
         emit OrderPlaced(orderId, user, side, base, quote, price, amount);
         _matchOrder(pairId, orderId);
+        return orderId;
     }
 
     /**
@@ -197,12 +207,14 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             while (
                 remaining > 0 &&
                 bestSellPrice > 0 &&
-                bestSellPrice <= incoming.price &&
+                (incoming.price == 0 || bestSellPrice <= incoming.price) &&
                 iterations < MAX_MATCH_ITERATIONS
             ) {
-                uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
+                iterations++;
+                uint256[] storage sellList = ob.sellOrdersAtPrice[
+                    bestSellPrice
+                ];
                 for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
-                    iterations++;
                     uint256 sellOrderId = sellList[i];
                     Order storage sellOrder = orders[sellOrderId];
                     if (!sellOrder.active) {
@@ -223,8 +235,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    
-            
+
                     // ■ 想定するトークンフロー
                     // • 入力注文（taker：Buy）の場合：
                     //    - taker は base トークンを受け取る (fill)
@@ -232,23 +243,30 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     // • 対する resting 注文（maker：Sell）の場合：
                     //    - maker は quote トークンを受け取る (fill × bestSellPrice)
                     //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
-                    
-                    _tradingVault.creditBalance(incoming.user, incoming.base, fill);
 
-                    _tradingVault.creditBalance(sellOrder.user, incoming.quote, fill * bestSellPrice);
-                    
-                    
+                    _tradingVault.creditBalance(
+                        incoming.user,
+                        incoming.base,
+                        fill
+                    );
+
+                    _tradingVault.creditBalance(
+                        sellOrder.user,
+                        incoming.quote,
+                        fill * bestSellPrice
+                    );
+
                     // --- ここまで ---
 
                     emit TradeExecuted(
-                        orderId,          // taker の注文 ID
-                        sellOrderId,      // maker の注文 ID
+                        orderId, // taker の注文 ID
+                        sellOrderId, // maker の注文 ID
                         incoming.base,
                         incoming.quote,
                         bestSellPrice,
                         fill,
                         0, // makerFee
-                        0  // takerFee
+                        0 // takerFee
                     );
                 }
                 if (sellList.length == 0) {
@@ -262,12 +280,12 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             while (
                 remaining > 0 &&
                 bestBuyPrice > 0 &&
-                bestBuyPrice >= incoming.price &&
+                (incoming.price == 0 || bestBuyPrice >= incoming.price) &&
                 iterations < MAX_MATCH_ITERATIONS
             ) {
+                iterations++;
                 uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
                 for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
-                    iterations++;
                     uint256 buyOrderId = buyList[i];
                     Order storage buyOrder = orders[buyOrderId];
                     if (!buyOrder.active) {
@@ -288,28 +306,36 @@ contract MatchingEngine is IMatchingEngine, Ownable {
                     } else {
                         i++;
                     }
-                    
+
                     // ■ 想定するトークンフロー
                     // • 入力注文（taker：Sell）の場合：
                     //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
                     //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
                     // • 対する resting 注文（maker：Buy）の場合：
                     //    - maker は quote トークンを差し引き (fill × bestBuyPrice)　-> lock済みなのでここでは処理しない
-                    //    - maker は base トークンを受け取る (fill)                    
-                    _tradingVault.creditBalance(incoming.user, incoming.quote, fill * bestBuyPrice);
+                    //    - maker は base トークンを受け取る (fill)
+                    _tradingVault.creditBalance(
+                        incoming.user,
+                        incoming.quote,
+                        fill * bestBuyPrice
+                    );
 
-                    _tradingVault.creditBalance(buyOrder.user, incoming.base, fill);
+                    _tradingVault.creditBalance(
+                        buyOrder.user,
+                        incoming.base,
+                        fill
+                    );
                     // --- ここまで ---
 
                     emit TradeExecuted(
-                        buyOrderId,       // maker の注文 ID
-                        orderId,          // taker の注文 ID
+                        buyOrderId, // maker の注文 ID
+                        orderId, // taker の注文 ID
                         incoming.base,
                         incoming.quote,
                         bestBuyPrice,
                         fill,
                         0, // makerFee
-                        0  // takerFee
+                        0 // takerFee
                     );
                 }
                 if (buyList.length == 0) {
@@ -319,7 +345,38 @@ contract MatchingEngine is IMatchingEngine, Ownable {
             }
         }
         incoming.amount = remaining;
-        if (remaining == 0) {
+
+        // 成行注文の場合、残りの注文をキャンセル
+        if (incoming.price == 0) {
+            if (remaining > 0) {
+                // 残りの注文をキャンセル
+                incoming.amount = incoming.amount - remaining;
+                incoming.active = false;
+
+                // 残りの資金を返却
+                if (incoming.side == OrderSide.Buy) {
+                    // 約定していない数量の割合を計算して返金
+                    uint256 lockedAmount = _tradingVault.getLockedAmount(
+                        orderId
+                    );
+                    uint256 refundAmount = (lockedAmount * remaining) /
+                        incoming.amount;
+                    _tradingVault.creditBalance(
+                        incoming.user,
+                        incoming.quote,
+                        refundAmount
+                    );
+                } else {
+                    // 約定していない数量分のbaseトークンを返却
+                    _tradingVault.creditBalance(
+                        incoming.user,
+                        incoming.base,
+                        remaining
+                    );
+                }
+            }
+        } else if (remaining == 0) {
+            // 指値注文で全量約定した場合は注文を無効化
             incoming.active = false;
         }
     }
@@ -551,7 +608,11 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     function getquotebaseTokenlanceAndAllowance(
         address[] calldata owners,
         address[] calldata tokens
-    ) external view returns (quotebaseTokenlanceAndAllowanceResult[] memory results) {
+    )
+        external
+        view
+        returns (quotebaseTokenlanceAndAllowanceResult[] memory results)
+    {
         require(owners.length == tokens.length, "Length mismatch");
         results = new quotebaseTokenlanceAndAllowanceResult[](owners.length);
         for (uint256 i = 0; i < owners.length; i++) {

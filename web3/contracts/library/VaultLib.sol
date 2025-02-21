@@ -13,7 +13,7 @@ library VaultLib {
         address base; // The Quote Tokeneing sold.
         address quote; // The Quote Tokeneing bought.
         uint256 amount; // Amount to sell
-        uint256 price; // The price of the order.
+        uint256 price; // The price of the order. 0 for market order.
         bytes signature; // User's signature.
     }
 
@@ -21,13 +21,7 @@ library VaultLib {
      * @notice Check the validity of the TradeRequest
      * @param req The TradeRequest to check
      */
-    function checkTradeRequest(
-        TradeRequest memory req
-    ) internal view {
-        require(
-            req.price > 0,
-            "Price should be greater than 0"
-        );        
+    function checkTradeRequest(TradeRequest memory req) internal view {
         require(msg.sender == req.user, "Invalid user");
         // TODO: check idempotency key is not duplicated (not implemented yet)
         // Additional signature verification: confirm that the user's signature is valid

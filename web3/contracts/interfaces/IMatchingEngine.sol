@@ -21,7 +21,7 @@ interface IMatchingEngine {
         bool active;
         uint256 next;
     }
-    
+
     /**
      * @notice Places an order on the matching engine.
      * @param base The Quote Tokeneing sold.
@@ -37,14 +37,35 @@ interface IMatchingEngine {
         OrderSide side,
         uint256 amount,
         uint256 price
-    ) external;
+    ) external returns (uint256 orderId);
+
+    function getPairId(
+        address base,
+        address quote
+    ) external view returns (bytes32);
+
+    /**
+     * @notice Returns the best (lowest) sell price for a given pair
+     * @param pairId The trading pair identifier
+     * @return The best sell price, or 0 if no sell orders exist
+     */
+    function getBestSellPrice(bytes32 pairId) external view returns (uint256);
+
+    /**
+     * @notice Returns the best (highest) buy price for a given pair
+     * @param pairId The trading pair identifier
+     * @return The best buy price, or 0 if no buy orders exist
+     */
+    function getBestBuyPrice(bytes32 pairId) external view returns (uint256);
 
     /**
      * @notice Returns the order information for the specified orderId
      * @param orderId The ID of the order to retrieve.
      * @return order The order information.
      */
-    function getOrder(uint256 orderId) external view returns (Order memory order);
+    function getOrder(
+        uint256 orderId
+    ) external view returns (Order memory order);
 
     /**
      * @notice Cancels an order on the matching engine.

@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/ITradingVault.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
-import "./Events.sol"; 
+import "./Events.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -18,13 +18,18 @@ contract TradingVault is ITradingVault, Ownable {
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
     IMatchingEngine public engine;
+    // 注文IDごとにロックした金額を保存
+    mapping(uint256 => uint256) private lockedAmounts;
 
     constructor(address _engine) Ownable(msg.sender) {
         engine = IMatchingEngine(_engine);
     }
 
     modifier onlyMatchingEngine() {
-        require(msg.sender == address(engine), "Only MatchingEngine can call this function");
+        require(
+            msg.sender == address(engine),
+            "Only MatchingEngine can call this function"
+        );
         _;
     }
 
@@ -48,18 +53,22 @@ contract TradingVault is ITradingVault, Ownable {
         emit Withdrawal(msg.sender, token, amount);
     }
 
-
     /**
      * @notice Retrieves the balance for a given user and token.
      */
-    function getBalance(address user, address token) external view returns (uint256) {
+    function getBalance(
+        address user,
+        address token
+    ) external view returns (uint256) {
         return balances[user][token];
     }
 
     /**
      * @notice Executes a batch of trades via the MatchingEngine.
      */
-    function executeTradeBatch(VaultLib.TradeRequest[] calldata trades) external payable override {
+    function executeTradeBatch(
+        VaultLib.TradeRequest[] calldata trades
+    ) external payable override {
         for (uint256 i = 0; i < trades.length; i++) {
             _executeSingleTrade(trades[i]);
         }
@@ -68,14 +77,22 @@ contract TradingVault is ITradingVault, Ownable {
     /**
      * @notice Deducts the balance for a given user and token.
      */
-    function deductBalance(address user, address token, uint256 amount) external onlyMatchingEngine {
+    function deductBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) external onlyMatchingEngine {
         balances[user][token] -= amount;
     }
 
     /**
      * @notice Credits the balance for a given user and token.
      */
-    function creditBalance(address user, address token, uint256 amount) external onlyMatchingEngine {
+    function creditBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) external onlyMatchingEngine {
         balances[user][token] += amount;
     }
 
@@ -88,34 +105,20 @@ contract TradingVault is ITradingVault, Ownable {
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         // Check trade request authorization.
         VaultLib.checkTradeRequest(req);
-        
-        if (req.side == IMatchingEngine.OrderSide.Buy) { // Buy order: use quote tokens to pay
-            // In a buy order, the user pays using Quote Tokens.
-            uint256 requiredQuote = req.amount * req.price;
-            require(balances[req.user][req.quote] >= requiredQuote, "Insufficient vault balance");
-            balances[req.user][req.quote] -= requiredQuote;
-            
-            engine.placeOrder(
-                req.user,
-                req.base,
-                req.quote,
-                req.side,
-                req.amount,
-                req.price
-            );
-        } else { // Sell order: use base as collateral
-            require(balances[req.user][req.base] >= req.amount, "Insufficient vault balance");
-            balances[req.user][req.base] -= req.amount;
-            
-            engine.placeOrder(
-                req.user,
-                req.base,
-                req.quote,
-                req.side,
-                req.amount,
-                req.price
-            );
-        }
+
+        uint256 lockedAmount = _lockTokens(req);
+
+        uint256 orderId = engine.placeOrder(
+            req.user,
+            req.base,
+            req.quote,
+            req.side,
+            req.amount,
+            req.price
+        );
+
+        // ロックした金額を保存
+        lockedAmounts[orderId] = lockedAmount;
     }
 
     /**
@@ -127,17 +130,63 @@ contract TradingVault is ITradingVault, Ownable {
         // 1. Get the order information from the MatchingEngine
         IMatchingEngine.Order memory order = engine.getOrder(orderId);
         require(order.user == msg.sender, "Not order owner");
-        
+
         // 2. Execute the cancellation process on the MatchingEngine
         bool success = engine.cancelOrder(orderId);
         require(success, "Engine cancellation failed");
-        
+
         // 3. Refund the remaining order amount (order.amount) to the user's vault balance
         if (order.amount > 0) {
             balances[msg.sender][order.base] += order.amount;
         }
-        
+
         emit OrderCancelled(orderId, msg.sender);
         return true;
+    }
+
+    function getLockedAmount(uint256 orderId) external view returns (uint256) {
+        return lockedAmounts[orderId];
+    }
+
+    function _lockTokens(
+        VaultLib.TradeRequest memory req
+    ) internal returns (uint256) {
+        uint256 quoteAmount;
+        uint256 baseAmount;
+
+        if (req.side == IMatchingEngine.OrderSide.Buy) {
+            if (req.price == 0) {
+                // 成行買い注文の場合、最高の売り注文価格でロック
+                bytes32 pairId = engine.getPairId(req.base, req.quote);
+                uint256 bestSellPrice = engine.getBestSellPrice(pairId);
+                require(bestSellPrice > 0, "No sell orders available");
+                quoteAmount = req.amount * bestSellPrice;
+            } else {
+                quoteAmount = req.amount * req.price;
+            }
+            require(
+                balances[req.user][req.quote] >= quoteAmount,
+                "Insufficient quote balance"
+            );
+            balances[req.user][req.quote] -= quoteAmount;
+        } else {
+            if (req.price == 0) {
+                // 成行売却注文の場合、最低の買い注文価格でロック
+                bytes32 pairId = engine.getPairId(req.base, req.quote);
+                uint256 bestBuyPrice = engine.getBestBuyPrice(pairId);
+                require(bestBuyPrice > 0, "No buy orders available");
+                baseAmount = req.amount * bestBuyPrice;
+            } else {
+                // Sell注文の場合、baseトークンをロック
+                baseAmount = req.amount;
+            }
+            require(
+                balances[req.user][req.base] >= baseAmount,
+                "Insufficient base balance"
+            );
+            balances[req.user][req.base] -= baseAmount;
+        }
+
+        return quoteAmount; // ロックした金額を返す
     }
 }

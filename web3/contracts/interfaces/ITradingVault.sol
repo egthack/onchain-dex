@@ -13,7 +13,17 @@ interface ITradingVault {
         VaultLib.TradeRequest[] calldata trades
     ) external payable;
 
-    function deductBalance(address user, address token, uint256 amount) external;
+    function deductBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) external;
 
-    function creditBalance(address user, address token, uint256 amount) external;
+    function creditBalance(
+        address user,
+        address token,
+        uint256 amount
+    ) external;
+
+    function getLockedAmount(uint256 orderId) external view returns (uint256);
 }
