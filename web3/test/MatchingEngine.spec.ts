@@ -80,6 +80,11 @@ describe("MatchingEngine", function () {
     await baseToken.connect(trader).approve(await vault.getAddress(), 10000);
     await vault.connect(trader).deposit(await baseToken.getAddress(), 10000);
 
+    // trader2 の初期設定を追加
+    await baseToken.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await baseToken.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await baseToken.getAddress(), 10000);
+
     await quoteToken.connect(admin).transfer(await user.getAddress(), 10000);
     await quoteToken.connect(user).approve(await vault.getAddress(), 10000);
     await vault.connect(user).deposit(await quoteToken.getAddress(), 10000);
@@ -87,6 +92,11 @@ describe("MatchingEngine", function () {
     await quoteToken.connect(admin).transfer(await trader.getAddress(), 10000);
     await quoteToken.connect(trader).approve(await vault.getAddress(), 10000);
     await vault.connect(trader).deposit(await quoteToken.getAddress(), 10000);
+
+    // trader2 の初期設定を追加
+    await quoteToken.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await quoteToken.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await quoteToken.getAddress(), 10000);
   });
 
   describe("Pair Management", function () {
@@ -522,52 +532,118 @@ describe("MatchingEngine", function () {
         expect(traderBalanceBase2).to.equal(9950);
         expect(traderBalanceQuote2).to.equal(10100);
       });
-    });
-    it("should execute market sell order against existing sell orders and not match all", async function () {
-      // 指値売り注文を作成
-      const limitSellOrder = await createTradeRequest({
-        user: trader,
-        base: baseToken,
-        quote: quoteToken,
-        side: 1, // Sell
-        amount: 100,
-        price: 2,
-      });
-      await vault.connect(trader).executeTradeBatch([limitSellOrder]);
-      // 成行買い注文を実行
-      const marketSellOrder = await createTradeRequest({
-        user: user,
-        base: baseToken,
-        quote: quoteToken,
-        side: 0, // Buy
-        amount: 300,
-        price: 0, // Market order
-      });
-      await vault.connect(user).executeTradeBatch([marketSellOrder]);
-      // 約定確認
-      const tradeExecutedEvents = await getContractEvents(
-        matchingEngine,
-        matchingEngine.filters.TradeExecuted
-      );
-      expect(tradeExecutedEvents.length).to.equal(1);
-      // 残高確認
-      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
-        vault,
-        user,
-        baseToken,
-        quoteToken
-      );
-      const {
-        userBalanceBase: traderBalanceBase,
-        userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
 
-      // base: 9900(100 returned), quote: 10200(200 returned)
-      expect(userBalanceBase).to.equal(10100);
-      expect(userBalanceQuote).to.equal(9800);
-      // base: 10100(100 locked), quote: 9800(200 locked)
-      expect(traderBalanceBase).to.equal(9900);
-      expect(traderBalanceQuote).to.equal(10200);
+      // 成行注文後、オーダーブックの最良売り注文が消えているかを検証するテスト
+      it("should execute market sell order against existing sell orders and not match all", async function () {
+        // 指値売り注文を作成
+        const limitSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader).executeTradeBatch([limitSellOrder]);
+        // 成行買い注文を実行
+        const marketSellOrder = await createTradeRequest({
+          user: user,
+          base: baseToken,
+          quote: quoteToken,
+          side: 0, // Buy
+          amount: 300,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketSellOrder]);
+        // 約定確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseToken,
+          quoteToken
+        );
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+
+        // base: 9900(100 returned), quote: 10200(200 returned)
+        expect(userBalanceBase).to.equal(10100);
+        expect(userBalanceQuote).to.equal(9800);
+        // base: 10100(100 locked), quote: 9800(200 locked)
+        expect(traderBalanceBase).to.equal(9900);
+        expect(traderBalanceQuote).to.equal(10200);
+      });
+
+      it("should remove best sell order from orderbook after market buy execution", async function () {
+        // 最良売り注文を作成 (price = 1)
+        const bestSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([bestSellOrder]);
+
+        // 次に高い売り注文を作成 (price = 2)
+        const secondSellOrder = await createTradeRequest({
+          user: trader2,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader2).executeTradeBatch([secondSellOrder]);
+
+        // オーダーブックの最良売り注文を確認
+        const pairId = await matchingEngine.getPairId(
+          await baseToken.getAddress(),
+          await quoteToken.getAddress()
+        );
+        const bestSellBefore = await matchingEngine.getBestOrder(pairId, 1); // side = 1 for sell
+        expect(bestSellBefore.price).to.equal(1);
+
+        // 成行買い注文を実行
+        const marketBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseToken,
+          quote: quoteToken,
+          side: 0, // Buy
+          amount: 100,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+
+        // 約定イベントを確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+
+        // オーダーブックの最良売り注文が更新されていることを確認
+        const bestSellAfter = await matchingEngine.getBestOrder(pairId, 1);
+        expect(bestSellAfter.price).to.equal(2); // 次に高い注文が最良売り注文になっているはず
+
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseToken,
+          quoteToken
+        );
+        expect(userBalanceBase).to.equal(10100); // 初期値10000 + 買った100
+        expect(userBalanceQuote).to.equal(9900); // 初期値10000 - 支払った100
+      });
     });
   });
 
