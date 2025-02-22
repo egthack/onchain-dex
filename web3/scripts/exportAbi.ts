@@ -3,7 +3,7 @@ import path from "path";
 import { artifacts } from "hardhat";
 
 // 出力先ディレクトリ
-const ABI_DIR = path.join(__dirname, "../../ponder/abis");
+const JSON_ABI_DIR = path.join(__dirname, "../../graphRiseSepolia/1.0.0/abis");
 
 // 出力したいコントラクトの一覧
 const contracts = [
@@ -15,8 +15,8 @@ const contracts = [
 // ABIファイルを作成
 async function exportAbi(): Promise<void> {
   // 出力先ディレクトリがない場合は作成
-  if (!fs.existsSync(ABI_DIR)) {
-    fs.mkdirSync(ABI_DIR, { recursive: true });
+  if (!fs.existsSync(JSON_ABI_DIR)) {
+    fs.mkdirSync(JSON_ABI_DIR, { recursive: true });
   }
 
   for (const contractName of contracts) {
@@ -24,22 +24,10 @@ async function exportAbi(): Promise<void> {
       // コントラクトのアーティファクトを取得
       const artifact = await artifacts.readArtifact(contractName);
 
-      // TypeScript用のインターフェースを生成
-      const interfaceName = `I${contractName}`;
-      const abiContent = `import type { Abi } from 'viem'
-
-export const ${contractName}ABI = ${JSON.stringify(
-        artifact.abi,
-        null,
-        2
-      )} as const satisfies Abi;
-
-export type ${interfaceName} = typeof ${contractName}ABI;
-`;
-
+      // JSON形式で出力（コントラクト名と同じファイル名で）
       fs.writeFileSync(
-        path.join(ABI_DIR, `${contractName.toLowerCase()}.ts`),
-        abiContent
+        path.join(JSON_ABI_DIR, `${contractName}.json`),
+        JSON.stringify(artifact.abi, null, 2)
       );
 
       console.log(`Generated ABI for ${contractName}`);
@@ -48,13 +36,6 @@ export type ${interfaceName} = typeof ${contractName}ABI;
       process.exit(1);
     }
   }
-
-  // index.tsファイルを生成
-  const indexContent = contracts
-    .map((name) => `export * from './${name.toLowerCase()}';`)
-    .join("\n");
-
-  fs.writeFileSync(path.join(ABI_DIR, "index.ts"), indexContent + "\n");
 
   console.log("ABI files exported successfully!");
 }
