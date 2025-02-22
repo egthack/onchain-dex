@@ -30,14 +30,14 @@ describe("MatchingEngine", function () {
     baseToken = await TokenFactory.connect(admin).deploy(
       "Base Token",
       "BASE",
-      1000000
+      100000000
     );
     await baseToken.waitForDeployment();
     // USDとかJPYとか
     quoteToken = await TokenFactory.connect(admin).deploy(
       "Quote Token",
       "QUOTE",
-      1000000
+      100000000
     );
     await quoteToken.waitForDeployment();
 
@@ -568,6 +568,152 @@ describe("MatchingEngine", function () {
       // base: 10100(100 locked), quote: 9800(200 locked)
       expect(traderBalanceBase).to.equal(9900);
       expect(traderBalanceQuote).to.equal(10200);
+    });
+  });
+
+  describe("Bulk Matching", function () {
+    beforeEach(async function () {
+      // 必要な量: BATCH_SIZE * amount * price = 300 * 100 * 1 = 30,000
+      const requiredAmount = 200000; // 余裕をもたせる
+      // traderにも同じ量を付与
+      await baseToken
+        .connect(admin)
+        .transfer(await user.getAddress(), requiredAmount);
+      await baseToken
+        .connect(user)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(user)
+        .deposit(await baseToken.getAddress(), requiredAmount);
+
+      await quoteToken
+        .connect(admin)
+        .transfer(await user.getAddress(), requiredAmount);
+      await quoteToken
+        .connect(user)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(user)
+        .deposit(await quoteToken.getAddress(), requiredAmount);
+
+      // traderにも必要な量を付与
+      await baseToken
+        .connect(admin)
+        .transfer(await trader.getAddress(), requiredAmount);
+      await baseToken
+        .connect(trader)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader)
+        .deposit(await baseToken.getAddress(), requiredAmount);
+
+      await quoteToken
+        .connect(admin)
+        .transfer(await trader.getAddress(), requiredAmount);
+      await quoteToken
+        .connect(trader)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader)
+        .deposit(await quoteToken.getAddress(), requiredAmount);
+    });
+
+    it("should match orders correctly with bulk matching", async function () {
+      const BATCH_SIZE = 300;
+      // まず売り注文を出す（買い注文のマッチング先として）
+      const sellOrderLength = Math.floor(BATCH_SIZE); // 全件マッチングできるように
+      for (let i = 0; i < sellOrderLength; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: trader,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([tradeRequest]);
+      }
+
+      // 買い注文を出す
+      const orders = [];
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseToken,
+          quote: quoteToken,
+          side: 0, // Buy
+          amount: 100,
+          price: 1,
+        });
+        orders.push(tradeRequest);
+      }
+      // 小さなバッチに分割して実行
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < orders.length; i += CHUNK_SIZE) {
+        const chunk = orders.slice(i, i + CHUNK_SIZE);
+        await vault.connect(user).executeTradeBatch(chunk);
+      }
+
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(orders.length);
+    });
+
+    it("should match orders correctly with bulk matching market order", async function () {
+      const BATCH_SIZE = 300;
+      // まず売り注文を出す（買い注文のマッチング先として）
+      const sellOrderLength = Math.floor(BATCH_SIZE); // 全件マッチングできるように
+      for (let i = 0; i < sellOrderLength; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: trader,
+          base: baseToken,
+          quote: quoteToken,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([tradeRequest]);
+      }
+
+      // 成行買い注文を実行
+      const marketBuyOrder = await createTradeRequest({
+        user: user,
+        base: baseToken,
+        quote: quoteToken,
+        side: 0, // Buy
+        amount: 30000,
+        price: 0, // Market order
+      });
+      await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+
+      expect(tradeExecutedEvents.length).to.equal(BATCH_SIZE);
+
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseToken,
+        quoteToken
+      );
+      // 10000(初期保有量) + 200000(今回付与) + 30000(成行買い注文約定) = 240000
+      expect(userBalanceBase).to.equal(240000);
+      // 10000(初期保有量) + 200000(今回付与) - 30000(成行買い注文約定) = 180000
+      expect(userBalanceQuote).to.equal(180000);
+
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      // 10000(初期保有量) + 200000(今回付与) - 30000(売り注文約定) = 180000
+      expect(traderBalanceBase).to.equal(180000);
+      // 10000(初期保有量) + 200000(今回付与) + 30000(売り注文約定) = 240000
+      expect(traderBalanceQuote).to.equal(240000);
     });
   });
 });

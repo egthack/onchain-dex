@@ -56,7 +56,7 @@ contract MatchingEngine is IMatchingEngine, Ownable {
     mapping(bytes32 => Pair) internal pairs;
 
     // Maximum iterations for matching to prevent out-of-gas.
-    uint256 constant MAX_MATCH_ITERATIONS = 2;
+    uint256 constant MAX_MATCH_ITERATIONS = 100;
     address public admin;
     address public vaultAddress;
     ITradingVault public _tradingVault;
