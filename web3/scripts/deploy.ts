@@ -1,6 +1,8 @@
 import { ethers } from "hardhat";
 const main = async () => {
   const [deployer] = await ethers.getSigners();
+  const blockNumber = await ethers.provider.getBlockNumber();
+  console.log("Current block number:", blockNumber);
   console.log("Deploying contracts with the account:", deployer.address);
   const BaseTokenFactory = await ethers.getContractFactory("MockERC20");
   const baseToken = await BaseTokenFactory.connect(deployer).deploy(
@@ -29,17 +31,20 @@ const main = async () => {
   );
   await matchingEngine.waitForDeployment();
   console.log("MatchingEngine deployed to:", await matchingEngine.getAddress());
-  const VaultFactory = await ethers.getContractFactory("TradingVault");
-  const tradingVault = await VaultFactory.connect(deployer).deploy(
+  const TradingVaultFactory = await ethers.getContractFactory("TradingVault");
+  const tradingVault = await TradingVaultFactory.connect(deployer).deploy(
     await matchingEngine.getAddress()
   );
   await tradingVault.waitForDeployment();
-  console.log("Vault deployed to:", await tradingVault.getAddress());
+  console.log("TradingVault deployed to:", await tradingVault.getAddress());
 
   await matchingEngine
     .connect(deployer)
     .setVaultAddress(await tradingVault.getAddress());
-  console.log("Vault address set to:", await tradingVault.getAddress());
+  console.log(
+    "MatchingEngine set TradingVault address to:",
+    await tradingVault.getAddress()
+  );
   await matchingEngine
     .connect(deployer)
     .addPair(
@@ -49,7 +54,9 @@ const main = async () => {
       18
     );
   console.log(
-    `Pair ${await baseToken.symbol()} / ${await quoteToken.symbol()} added to MatchingEngine`
+    `Pair 
+    ${await baseToken.symbol()} (${await baseToken.getAddress()}) / ${await quoteToken.symbol()} (${await quoteToken.getAddress()}) 
+    added to MatchingEngine`
   );
 };
 
