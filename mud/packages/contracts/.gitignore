@@ -11,3 +11,5 @@ out/IWorld.sol/*
 .mud
 deploys
 *.db*
+
+node_modules
