@@ -186,11 +186,12 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
 
         if (req.side == IMatchingEngine.OrderSide.Buy) {
             if (req.price == 0) {
-                // 成行買い注文の場合、最高の売り注文価格でロック
+                // 対向の板があることだけを確認
                 bytes32 pairId = engine.getPairId(req.base, req.quote);
                 uint256 bestSellPrice = engine.getBestSellPrice(pairId);
                 require(bestSellPrice > 0, "No sell orders available");
-                quoteAmount = req.amount * bestSellPrice;
+                // ロックは指定された数量で
+                quoteAmount = req.amount;
             } else {
                 quoteAmount = req.amount * req.price;
             }
@@ -201,15 +202,13 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             balances[req.user][req.quote] -= quoteAmount;
         } else {
             if (req.price == 0) {
-                // 成行売却注文の場合、最低の買い注文価格でロック
+                // 対向の板があることだけを確認
                 bytes32 pairId = engine.getPairId(req.base, req.quote);
                 uint256 bestBuyPrice = engine.getBestBuyPrice(pairId);
                 require(bestBuyPrice > 0, "No buy orders available");
-                baseAmount = req.amount * bestBuyPrice;
-            } else {
-                // Sell注文の場合、baseトークンをロック
-                baseAmount = req.amount;
             }
+            // 売り注文は常にbase tokenの数量をロック
+            baseAmount = req.amount;
             require(
                 balances[req.user][req.base] >= baseAmount,
                 "Insufficient base balance"

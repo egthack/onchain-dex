@@ -236,15 +236,27 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                         sellList.pop();
                         continue;
                     }
-                    uint256 fill = remaining < sellOrder.amount
-                        ? remaining
-                        : sellOrder.amount;
+                    uint256 fill;
+                    if (incoming.price == 0) {
+                        // 成行買い注文
+                        // remainingはquote token量なので、base token量に変換
+                        uint256 maxBaseFill = remaining / bestSellPrice; // quote -> base
+                        fill = maxBaseFill < sellOrder.amount
+                            ? maxBaseFill
+                            : sellOrder.amount;
+                    } else {
+                        fill = remaining < sellOrder.amount
+                            ? remaining
+                            : sellOrder.amount;
+                    }
 
                     if (fill > 0) {
                         // 状態変更を先に行う
                         sellOrder.amount -= fill;
                         sellOrder.active = (sellOrder.amount > 0);
-                        remaining -= fill;
+                        remaining -= (incoming.price == 0)
+                            ? fill * bestSellPrice // quote token amount
+                            : fill; // base token amount
                         if (sellOrder.amount == 0) {
                             sellList[i] = sellList[sellList.length - 1];
                             sellList.pop();
@@ -252,13 +264,13 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             i++;
                         }
 
-                        // ■ 想定するトークンフロー
-                        // • 入力注文（taker：Buy）の場合：
-                        //    - taker は base トークンを受け取る (fill)
-                        //    - taker は quote トークンを差し引き (fill × bestSellPrice)　-> lock済みなのでここでは処理しない
-                        // • 対する resting 注文（maker：Sell）の場合：
-                        //    - maker は quote トークンを受け取る (fill × bestSellPrice)
-                        //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
+                        // ■ 想定するトークンフロー(do not remove this comment)
+                        // • 入力注文（taker：Buy）の場合：
+                        //    - taker は base トークンを受け取る (fill)
+                        //    - taker は quote トークンを差し引き (fill × bestSellPrice) -> lock済みなのでここでは処理しない
+                        // • 対する resting 注文（maker：Sell）の場合：
+                        //    - maker は quote トークンを受け取る (fill × bestSellPrice)
+                        //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
 
                         _tradingVault.creditBalance(
                             incoming.user,
@@ -321,13 +333,13 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             i++;
                         }
 
-                        // ■ 想定するトークンフロー
-                        // • 入力注文（taker：Sell）の場合：
-                        //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
-                        //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
-                        // • 対する resting 注文（maker：Buy）の場合：
-                        //    - maker は quote トークンを差し引き (fill × bestBuyPrice)　-> lock済みなのでここでは処理しない
-                        //    - maker は base トークンを受け取る (fill)
+                        // ■ 想定するトークンフロー(do not remove this comment)
+                        // • 入力注文（taker：Sell）の場合：
+                        //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
+                        //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
+                        // • 対する resting 注文（maker：Buy）の場合：
+                        //    - maker は quote トークンを差し引き (fill × bestBuyPrice) -> lock済みなのでここでは処理しない
+                        //    - maker は base トークンを受け取る (fill)
                         _tradingVault.creditBalance(
                             incoming.user,
                             incoming.quote,

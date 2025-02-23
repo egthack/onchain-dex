@@ -512,16 +512,16 @@ describe("MatchingEngine", function () {
           baseToken,
           quoteToken
         );
-        // base: 10050(50 returned), quote: 9900(50 locked and 100 used(amount 50 * price 2))
-        expect(userBalanceBase).to.equal(10050);
-        expect(userBalanceQuote).to.equal(9900);
+        // base: 10025(50/2=25 bought), quote: 9950(50 used)
+        expect(userBalanceBase).to.equal(10025);
+        expect(userBalanceQuote).to.equal(9950);
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
         } = await getTokenBalances(vault, trader, baseToken, quoteToken);
-        // base: 9900(50 locked, 50 sold), quote: 10100(100 returned)
+        // base: 9900(75 locked, 25 sold), quote: 10050(50 returned)
         expect(traderBalanceBase).to.equal(9900);
-        expect(traderBalanceQuote).to.equal(10100);
+        expect(traderBalanceQuote).to.equal(10050);
 
         // trader の50 locked 注文をキャンセルして返金される金額を確認
         await vault.connect(trader).cancelOrder(0);
@@ -529,9 +529,9 @@ describe("MatchingEngine", function () {
           userBalanceBase: traderBalanceBase2,
           userBalanceQuote: traderBalanceQuote2,
         } = await getTokenBalances(vault, trader, baseToken, quoteToken);
-        // base: 9950(9900 + 50 returned), quote: 10100)
-        expect(traderBalanceBase2).to.equal(9950);
-        expect(traderBalanceQuote2).to.equal(10100);
+        // base: 9975(9900 + 25 bought 50 locked), quote: 10050(50 returned)
+        expect(traderBalanceBase2).to.equal(9975);
+        expect(traderBalanceQuote2).to.equal(10050);
       });
 
       // 成行注文後、オーダーブックの最良売り注文が消えているかを検証するテスト
