@@ -9,9 +9,11 @@ interface ITradingVault {
 
     function withdraw(address token, uint256 amount) external;
 
+    function withdrawETH() external;
+
     function executeTradeBatch(
         VaultLib.TradeRequest[] calldata trades
-    ) external payable;
+    ) external;
 
     function deductBalance(
         address user,
