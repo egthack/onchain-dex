@@ -216,10 +216,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 iterations = 0;
         uint256 originalAmount = incoming.amount;
 
-        // 既存のCreditInfo構造体を使用
-        CreditInfo[] memory creditQueue = new CreditInfo[](10);
-        uint256 creditCount = 0;
-
         if (incoming.side == OrderSide.Buy) {
             uint256 bestSellPrice = ob.sellTree.getMin();
             while (
@@ -244,7 +240,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                         ? remaining
                         : sellOrder.amount;
 
-                    // 約定が成立する場合のみ処理を実行
                     if (fill > 0) {
                         // 状態変更を先に行う
                         sellOrder.amount -= fill;
@@ -257,19 +252,25 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             i++;
                         }
 
-                        // クレジット情報を保存
-                        creditQueue[creditCount++] = CreditInfo({
-                            user: incoming.user,
-                            token: incoming.base,
-                            amount: fill
-                        });
-                        creditQueue[creditCount++] = CreditInfo({
-                            user: sellOrder.user,
-                            token: incoming.quote,
-                            amount: fill * bestSellPrice
-                        });
+                        // ■ 想定するトークンフロー
+                        // • 入力注文（taker：Buy）の場合：
+                        //    - taker は base トークンを受け取る (fill)
+                        //    - taker は quote トークンを差し引き (fill × bestSellPrice)　-> lock済みなのでここでは処理しない
+                        // • 対する resting 注文（maker：Sell）の場合：
+                        //    - maker は quote トークンを受け取る (fill × bestSellPrice)
+                        //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
 
-                        // 約定が成立した場合のみイベント発行
+                        _tradingVault.creditBalance(
+                            incoming.user,
+                            incoming.base,
+                            fill
+                        );
+                        _tradingVault.creditBalance(
+                            sellOrder.user,
+                            incoming.quote,
+                            fill * bestSellPrice
+                        );
+
                         emit TradeExecuted(
                             orderId,
                             sellOrderId,
@@ -309,7 +310,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                         ? remaining
                         : buyOrder.amount;
 
-                    // 約定が成立する場合のみ処理を実行
                     if (fill > 0) {
                         buyOrder.amount -= fill;
                         buyOrder.active = (buyOrder.amount > 0);
@@ -321,19 +321,24 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             i++;
                         }
 
-                        // クレジット情報を保存
-                        creditQueue[creditCount++] = CreditInfo({
-                            user: incoming.user,
-                            token: incoming.quote,
-                            amount: fill * bestBuyPrice
-                        });
-                        creditQueue[creditCount++] = CreditInfo({
-                            user: buyOrder.user,
-                            token: incoming.base,
-                            amount: fill
-                        });
+                        // ■ 想定するトークンフロー
+                        // • 入力注文（taker：Sell）の場合：
+                        //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
+                        //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
+                        // • 対する resting 注文（maker：Buy）の場合：
+                        //    - maker は quote トークンを差し引き (fill × bestBuyPrice)　-> lock済みなのでここでは処理しない
+                        //    - maker は base トークンを受け取る (fill)
+                        _tradingVault.creditBalance(
+                            incoming.user,
+                            incoming.quote,
+                            fill * bestBuyPrice
+                        );
+                        _tradingVault.creditBalance(
+                            buyOrder.user,
+                            incoming.base,
+                            fill
+                        );
 
-                        // 約定が成立した場合のみイベント発行
                         emit TradeExecuted(
                             buyOrderId,
                             orderId,
@@ -379,16 +384,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid refund token"
         );
 
-        // すべての状態変更が完了した後でクレジット処理を実行
-        for (uint256 i = 0; i < creditCount; i++) {
-            _tradingVault.creditBalance(
-                creditQueue[i].user,
-                creditQueue[i].token,
-                creditQueue[i].amount
-            );
-        }
-
-        // 成行注文の返金処理も最後に実行
+        // 成行注文の返金処理は最後に実行
         if (refundAmount > 0) {
             _tradingVault.creditBalance(
                 incoming.user,
