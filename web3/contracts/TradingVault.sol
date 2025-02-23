@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/ITradingVault.sol";
@@ -7,17 +7,18 @@ import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
 import "./Events.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title TradingVault
  * @dev Manages user balances, fund deposits/withdrawals.
  *      It allows executing batched trades via an external MatchingEngine.
  */
-contract TradingVault is ITradingVault, Ownable {
+contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
-    IMatchingEngine public engine;
+    IMatchingEngine public immutable engine;
     // 注文IDごとにロックした金額を保存
     mapping(uint256 => uint256) private lockedAmounts;
 
@@ -36,9 +37,19 @@ contract TradingVault is ITradingVault, Ownable {
     /**
      * @notice Deposits tokens into the Vault.
      */
-    function deposit(address token, uint256 amount) external override {
+    function deposit(
+        address token,
+        uint256 amount
+    ) external override nonReentrant {
         require(amount > 0, "Amount must be > 0");
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+
+        bool success = IERC20(token).transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
+        require(success, "Token transfer failed");
+
         balances[msg.sender][token] += amount;
         emit Deposit(msg.sender, token, amount);
     }
@@ -46,10 +57,19 @@ contract TradingVault is ITradingVault, Ownable {
     /**
      * @notice Withdraws tokens from the Vault.
      */
-    function withdraw(address token, uint256 amount) external override {
+    function withdraw(
+        address token,
+        uint256 amount
+    ) external override nonReentrant {
+        // ゼロ金額の引き出しを許可
+        if (amount == 0) return;
         require(balances[msg.sender][token] >= amount, "Insufficient balance");
+
         balances[msg.sender][token] -= amount;
-        IERC20(token).transfer(msg.sender, amount);
+
+        bool success = IERC20(token).transfer(msg.sender, amount);
+        require(success, "Token transfer failed");
+
         emit Withdrawal(msg.sender, token, amount);
     }
 
@@ -68,7 +88,7 @@ contract TradingVault is ITradingVault, Ownable {
      */
     function executeTradeBatch(
         VaultLib.TradeRequest[] calldata trades
-    ) external payable override {
+    ) external override nonReentrant {
         for (uint256 i = 0; i < trades.length; i++) {
             _executeSingleTrade(trades[i]);
         }
@@ -105,6 +125,7 @@ contract TradingVault is ITradingVault, Ownable {
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         VaultLib.checkTradeRequest(req);
 
+        // 1. トークンのロックと注文の作成
         uint256 lockedAmount = _lockTokens(req);
         uint256 orderId = engine.placeOrder(
             req.user,
@@ -116,8 +137,18 @@ contract TradingVault is ITradingVault, Ownable {
         );
         lockedAmounts[orderId] = lockedAmount;
 
-        // マッチング処理を分離
+        // 2. 注文作成後すぐにマッチング処理を実行
         engine.matchOrder(orderId);
+
+        emit OrderPlaced(
+            orderId,
+            req.user,
+            req.side,
+            req.base,
+            req.quote,
+            req.price,
+            req.amount
+        );
     }
 
     /**
@@ -125,7 +156,7 @@ contract TradingVault is ITradingVault, Ownable {
      * @param orderId The ID of the order to cancel.
      * @return true if cancellation succeeded.
      */
-    function cancelOrder(uint256 orderId) external returns (bool) {
+    function cancelOrder(uint256 orderId) external nonReentrant returns (bool) {
         // 1. Get the order information from the MatchingEngine
         IMatchingEngine.Order memory order = engine.getOrder(orderId);
         require(order.user == msg.sender, "Not order owner");
@@ -150,7 +181,7 @@ contract TradingVault is ITradingVault, Ownable {
     function _lockTokens(
         VaultLib.TradeRequest memory req
     ) internal returns (uint256) {
-        uint256 quoteAmount;
+        uint256 quoteAmount = 0;
         uint256 baseAmount;
 
         if (req.side == IMatchingEngine.OrderSide.Buy) {
@@ -187,5 +218,16 @@ contract TradingVault is ITradingVault, Ownable {
         }
 
         return quoteAmount; // ロックした金額を返す
+    }
+
+    /**
+     * @notice Withdraws ETH from the Vault.
+     */
+    function withdrawETH() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No ETH to withdraw");
+
+        (bool success, ) = payable(owner()).call{value: balance}("");
+        require(success, "ETH transfer failed");
     }
 }

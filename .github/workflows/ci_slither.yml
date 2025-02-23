@@ -1,0 +1,41 @@
+name: Slither Analysis
+on:
+  push:
+    paths:
+      - 'web3/**'
+      - '.github/workflows/ci_slither.yml'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    env:
+      SEPOLIA_URL: "https://eth-sepolia.g.alchemy.com/v2/"
+      RISE_SEPOLIA_URL: "https://eth-sepolia.g.alchemy.com/v2/"
+      PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: web3/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web3
+        run: npm ci
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          target: 'web3/'
+          slither-args: '--exclude-dependencies --filter-paths "node_modules|test" --exclude naming-convention,solc-version'
+          sarif: 'results.sarif'
+          fail-on: 'high'
+
+      # - name: Upload SARIF file
+      #   uses: github/codeql-action/upload-sarif@v3
+      #   if: always()
+      #   with:
+      #     sarif_file: 'results.sarif'
