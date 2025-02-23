@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.20;
 
 /**
  * @title RedBlackTreeLib
@@ -11,7 +11,7 @@ pragma solidity ^0.8.17;
 library RedBlackTreeLib {
     // 定数: 存在フラグと色のフラグ
     uint8 constant FLAG_EXISTS = 2; // 存在している場合のフラグ (bit1)
-    uint8 constant FLAG_RED    = 1; // 赤の場合のフラグ (bit0)
+    uint8 constant FLAG_RED = 1; // 赤の場合のフラグ (bit0)
 
     // ノード構造体（ストレージ最適化のため、フラグをパッキング）
     struct Node {
@@ -34,14 +34,20 @@ library RedBlackTreeLib {
     /**
      * @notice 指定のkeyがツリー内に存在するかチェックする。
      */
-    function exists(Tree storage tree, uint256 key) internal view returns (bool) {
+    function exists(
+        Tree storage tree,
+        uint256 key
+    ) internal view returns (bool) {
         return (tree.nodes[key].flags & FLAG_EXISTS) != 0;
     }
 
     /**
      * @notice 指定のkeyのノードが赤かどうかを返す。keyがセントネルの場合は黒とみなす。
      */
-    function isRed(Tree storage tree, uint256 key) internal view returns (bool) {
+    function isRed(
+        Tree storage tree,
+        uint256 key
+    ) internal view returns (bool) {
         if (key == 0) return false;
         return (tree.nodes[key].flags & FLAG_RED) != 0;
     }
@@ -192,7 +198,10 @@ library RedBlackTreeLib {
     /**
      * @notice _subtreeMin: 指定ノードから始まる部分木の最小キーを返す。
      */
-    function _subtreeMin(Tree storage tree, uint256 node) internal view returns (uint256) {
+    function _subtreeMin(
+        Tree storage tree,
+        uint256 node
+    ) internal view returns (uint256) {
         uint256 current = node;
         while (tree.nodes[current].left != 0) {
             current = tree.nodes[current].left;
@@ -222,7 +231,10 @@ library RedBlackTreeLib {
                     leftRotate(tree, parent);
                     w = tree.nodes[parent].right;
                 }
-                if (!isRed(tree, tree.nodes[w].left) && !isRed(tree, tree.nodes[w].right)) {
+                if (
+                    !isRed(tree, tree.nodes[w].left) &&
+                    !isRed(tree, tree.nodes[w].right)
+                ) {
                     // w の子がどちらも黒（またはnil）なら、w を赤に設定
                     // ただし、wがセントネルの場合はスキップ（通常発生しないはず）
                     if (w != 0) {
@@ -264,7 +276,10 @@ library RedBlackTreeLib {
                     rightRotate(tree, parent);
                     w = tree.nodes[parent].left;
                 }
-                if (!isRed(tree, tree.nodes[w].left) && !isRed(tree, tree.nodes[w].right)) {
+                if (
+                    !isRed(tree, tree.nodes[w].left) &&
+                    !isRed(tree, tree.nodes[w].right)
+                ) {
                     if (w != 0) {
                         setRed(tree, w);
                     }
@@ -416,7 +431,10 @@ library RedBlackTreeLib {
     /**
      * @notice 指定のkeyの前駆値（Predecessor）を返す。存在しなければ0を返す。
      */
-    function getPredecessor(Tree storage tree, uint256 key) internal view returns (uint256) {
+    function getPredecessor(
+        Tree storage tree,
+        uint256 key
+    ) internal view returns (uint256) {
         uint256 current = key;
         if (tree.nodes[current].left != 0) {
             current = tree.nodes[current].left;
@@ -436,7 +454,10 @@ library RedBlackTreeLib {
     /**
      * @notice 指定のkeyの後継値（Successor）を返す。存在しなければ0を返す。
      */
-    function getSuccessor(Tree storage tree, uint256 key) internal view returns (uint256) {
+    function getSuccessor(
+        Tree storage tree,
+        uint256 key
+    ) internal view returns (uint256) {
         uint256 current = key;
         if (tree.nodes[current].right != 0) {
             current = tree.nodes[current].right;

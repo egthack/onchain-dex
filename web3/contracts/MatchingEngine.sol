@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 import "hardhat/console.sol";
 import "./library/RedBlackTreeLib.sol";
@@ -65,7 +65,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
     // Maximum iterations for matching to prevent out-of-gas.
     uint256 constant MAX_MATCH_ITERATIONS = 100;
-    address public admin;
+    address public immutable admin;
     address public vaultAddress;
     ITradingVault public _tradingVault;
 
@@ -73,18 +73,20 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 _makerFeeRate,
         uint256 _takerFeeRate
     ) Ownable(msg.sender) {
-        admin = msg.sender;
+        admin = _msgSender();
         makerFeeRate = _makerFeeRate;
         takerFeeRate = _takerFeeRate;
     }
 
     /** @notice Sets the vault address.
      * Only the owner can set it.
-     * @param _vault The address of the TradingVault contract.
+     * @param newVault The address of the TradingVault contract.
      */
-    function setVaultAddress(address _vault) external onlyOwner {
-        vaultAddress = _vault;
-        _tradingVault = ITradingVault(_vault);
+    function setVaultAddress(address newVault) external onlyOwner {
+        require(newVault != address(0), "Zero address not allowed");
+        vaultAddress = newVault;
+        _tradingVault = ITradingVault(newVault);
+        emit VaultAddressUpdated(newVault);
     }
 
     /** @dev Restricts function call to the vault only */
@@ -417,14 +419,14 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         BestOrderResult bestSellOrder;
     }
 
-    struct basefoResult {
+    struct BaseInfoResult {
         string symbol;
         string name;
         uint8 decimals;
         uint totalSupply;
     }
 
-    struct quotebaseTokenlanceAndAllowanceResult {
+    struct TokenBalanceAndAllowanceResult {
         uint balance;
         uint allowance;
     }
@@ -567,22 +569,44 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
     /**
      * @notice Returns an array of pairs starting from a given offset.
-     * @param count Number of pairs to return.
      * @param offset Starting index.
+     * @param limit Number of pairs to return.
      * @return pairResults Array of PairResult structures.
      */
     function getPairs(
-        uint count,
-        uint offset
+        uint256 offset,
+        uint256 limit
     ) external view returns (PairResult[] memory pairResults) {
-        require(offset < pairKeys.length, "Offset out of range");
-        uint256 len = (offset + count > pairKeys.length)
-            ? pairKeys.length - offset
-            : count;
-        pairResults = new PairResult[](len);
-        for (uint256 i = 0; i < len; i++) {
-            pairResults[i] = this.getPair(i + offset);
+        uint256 end = offset + limit;
+        if (end > pairKeys.length) end = pairKeys.length;
+        pairResults = new PairResult[](end - offset);
+        bytes32[] memory keys = new bytes32[](end - offset);
+        for (uint256 i = 0; i < end - offset; i++) {
+            keys[i] = pairKeys[i + offset];
         }
+        for (uint256 i = 0; i < end - offset; i++) {
+            pairResults[i] = _getPair(keys[i]);
+        }
+    }
+
+    function _getPair(bytes32 key) internal view returns (PairResult memory) {
+        Pair memory p = pairs[key];
+        BestOrderResult memory bestBuy = getBestOrder(
+            key,
+            IMatchingEngine.OrderSide.Buy
+        );
+        BestOrderResult memory bestSell = getBestOrder(
+            key,
+            IMatchingEngine.OrderSide.Sell
+        );
+        return
+            PairResult({
+                pairId: key,
+                tokenz: [p.tokenz[0], p.tokenz[1]],
+                decimals: p.decimals,
+                bestBuyOrder: bestBuy,
+                bestSellOrder: bestSell
+            });
     }
 
     /**
@@ -592,11 +616,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
      */
     function getbasefo(
         address[] calldata tokens
-    ) external view returns (basefoResult[] memory results) {
-        results = new basefoResult[](tokens.length);
+    ) external view returns (BaseInfoResult[] memory results) {
+        results = new BaseInfoResult[](tokens.length);
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 t = IERC20(tokens[i]);
-            results[i] = basefoResult({
+            results[i] = BaseInfoResult({
                 symbol: t.symbol(),
                 name: t.name(),
                 decimals: t.decimals(),
@@ -614,16 +638,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     function getquotebaseTokenlanceAndAllowance(
         address[] calldata owners,
         address[] calldata tokens
-    )
-        external
-        view
-        returns (quotebaseTokenlanceAndAllowanceResult[] memory results)
-    {
+    ) external view returns (TokenBalanceAndAllowanceResult[] memory results) {
         require(owners.length == tokens.length, "Length mismatch");
-        results = new quotebaseTokenlanceAndAllowanceResult[](owners.length);
+        results = new TokenBalanceAndAllowanceResult[](owners.length);
         for (uint256 i = 0; i < owners.length; i++) {
             IERC20 t = IERC20(tokens[i]);
-            results[i] = quotebaseTokenlanceAndAllowanceResult({
+            results[i] = TokenBalanceAndAllowanceResult({
                 balance: t.balanceOf(owners[i]),
                 allowance: t.allowance(owners[i], address(this))
             });
@@ -634,16 +654,16 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
     /**
      * @notice Allows the admin to update fee rates.
-     * @param _makerFeeRate New maker fee rate in basis points.
-     * @param _takerFeeRate New taker fee rate in basis points.
+     * @param newMakerFeeRate New maker fee rate in basis points.
+     * @param newTakerFeeRate New taker fee rate in basis points.
      */
     function setFeeRates(
-        uint256 _makerFeeRate,
-        uint256 _takerFeeRate
+        uint256 newMakerFeeRate,
+        uint256 newTakerFeeRate
     ) external onlyOwner {
-        makerFeeRate = _makerFeeRate;
-        takerFeeRate = _takerFeeRate;
-        emit FeeRatesUpdated(_makerFeeRate, _takerFeeRate);
+        makerFeeRate = newMakerFeeRate;
+        takerFeeRate = newTakerFeeRate;
+        emit FeeRatesUpdated(newMakerFeeRate, newTakerFeeRate);
     }
 
     /**
