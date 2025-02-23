@@ -653,9 +653,13 @@ contract MatchingEngine is IMatchingEngine, Ownable {
         uint256 makerAmount = makerFeesCollected[token];
         uint256 takerAmount = takerFeesCollected[token];
         require(makerAmount + takerAmount > 0, "No fees to withdraw");
+
         makerFeesCollected[token] = 0;
         takerFeesCollected[token] = 0;
-        IERC20(token).transfer(admin, makerAmount + takerAmount);
+
+        bool success = IERC20(token).transfer(admin, makerAmount + takerAmount);
+        require(success, "Fee transfer failed");
+
         emit FeesWithdrawn(token, makerAmount, takerAmount);
     }
 }

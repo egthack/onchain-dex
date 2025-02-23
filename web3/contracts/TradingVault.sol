@@ -37,8 +37,15 @@ contract TradingVault is ITradingVault, Ownable {
      * @notice Deposits tokens into the Vault.
      */
     function deposit(address token, uint256 amount) external override {
-        require(amount > 0, "Amount must be > 0");
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        require(amount > 0, "Amount must be greater than 0");
+
+        bool success = IERC20(token).transferFrom(
+            msg.sender,
+            address(this),
+            amount
+        );
+        require(success, "Token transfer failed");
+
         balances[msg.sender][token] += amount;
         emit Deposit(msg.sender, token, amount);
     }
@@ -47,9 +54,14 @@ contract TradingVault is ITradingVault, Ownable {
      * @notice Withdraws tokens from the Vault.
      */
     function withdraw(address token, uint256 amount) external override {
+        require(amount > 0, "Amount must be greater than 0");
         require(balances[msg.sender][token] >= amount, "Insufficient balance");
+
         balances[msg.sender][token] -= amount;
-        IERC20(token).transfer(msg.sender, amount);
+
+        bool success = IERC20(token).transfer(msg.sender, amount);
+        require(success, "Token transfer failed");
+
         emit Withdrawal(msg.sender, token, amount);
     }
 
