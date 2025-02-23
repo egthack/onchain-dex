@@ -36,6 +36,15 @@ To ensure all necessary libraries are installed for each part of the project, pl
 
 Executing these commands will ensure that all required libraries are installed for each component of the project. Please refer to the official documentation for further details on library management and installation.
 
+## Running the Project
+
+To launch the project, simply execute the following command within the `mud` directory:
+
+  ```
+  pnpm dev
+  ```
+
+
 
 ## Project Architecture
 
