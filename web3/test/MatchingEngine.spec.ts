@@ -119,8 +119,12 @@ describe("MatchingEngine", function () {
           8,
           8
         );
-      const pairs = await matchingEngine.getPairs(2, 0);
+      const pairs = await matchingEngine.getPairsWithPagination(0, 10);
       expect(pairs.length).to.equal(2);
+
+      // ペアの内容検証
+      expect(pairs[0].tokenz[0]).to.equal(await baseToken.getAddress());
+      expect(pairs[0].tokenz[1]).to.equal(await quoteToken.getAddress());
     });
   });
 
@@ -279,14 +283,12 @@ describe("MatchingEngine", function () {
         amount: 100,
         price: 2,
       });
-      // ここでマッチングするはず
       await vault.connect(trader).executeTradeBatch([tradeRequest2]);
 
       const tradeExecutedEvents = await getContractEvents(
         matchingEngine,
         matchingEngine.filters.TradeExecuted
       );
-
       expect(tradeExecutedEvents.length).to.equal(1);
 
       // --- 注文結果の検証 ---
@@ -316,7 +318,6 @@ describe("MatchingEngine", function () {
 
     // 全量マッチング
     it("should match orders correctly with sell order", async function () {
-      // baseToken を 100 トークンprice 2で売るのでquoteToken 200トークンが入る
       const tradeRequest1 = await createTradeRequest({
         user: user,
         base: baseToken,
@@ -327,7 +328,6 @@ describe("MatchingEngine", function () {
       });
       await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-      // baseToken を 100 トークンprice 2で買うのでquoteToken 200トークンが出る
       const tradeRequest2 = await createTradeRequest({
         user: trader,
         base: baseToken,
@@ -390,6 +390,7 @@ describe("MatchingEngine", function () {
         price: 1,
       });
       await vault.connect(trader).executeTradeBatch([tradeRequest2]);
+
       const tradeExecutedEvents = await getContractEvents(
         matchingEngine,
         matchingEngine.filters.TradeExecuted
@@ -716,8 +717,7 @@ describe("MatchingEngine", function () {
 
     it("should match orders correctly with bulk matching", async function () {
       const BATCH_SIZE = 300;
-      // まず売り注文を出す（買い注文のマッチング先として）
-      const sellOrderLength = Math.floor(BATCH_SIZE); // 全件マッチングできるように
+      const sellOrderLength = Math.floor(BATCH_SIZE);
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,
@@ -759,8 +759,7 @@ describe("MatchingEngine", function () {
 
     it("should match orders correctly with bulk matching market order", async function () {
       const BATCH_SIZE = 300;
-      // まず売り注文を出す（買い注文のマッチング先として）
-      const sellOrderLength = Math.floor(BATCH_SIZE); // 全件マッチングできるように
+      const sellOrderLength = Math.floor(BATCH_SIZE);
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,

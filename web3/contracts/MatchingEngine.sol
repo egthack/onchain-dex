@@ -216,7 +216,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 iterations = 0;
         uint256 originalAmount = incoming.amount;
 
-        CreditInfo[] memory creditQueue = new CreditInfo[](2);
+        // 既存のCreditInfo構造体を使用
+        CreditInfo[] memory creditQueue = new CreditInfo[](10);
         uint256 creditCount = 0;
 
         if (incoming.side == OrderSide.Buy) {
@@ -346,7 +347,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
         // 状態変更を先に行う
         incoming.amount = remaining;
-        incoming.active = false;
+        incoming.active = (remaining > 0);
 
         // 成行注文の処理のための状態も先に計算
         uint256 refundAmount = 0;
@@ -360,6 +361,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 refundAmount = remaining;
                 refundToken = incoming.base;
             }
+        } else if (remaining == 0) {
+            incoming.active = false;
         }
 
         // refundTokenが設定されていることを確認
@@ -368,7 +371,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid refund token"
         );
 
-        // 外部呼び出しをまとめて最後に実行
+        // すべての状態変更が完了した後でクレジット処理を実行
         for (uint256 i = 0; i < creditCount; i++) {
             _tradingVault.creditBalance(
                 creditQueue[i].user,
@@ -568,24 +571,20 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns an array of pairs starting from a given offset.
+     * @notice Returns a paginated array of pairs.
      * @param offset Starting index.
-     * @param limit Number of pairs to return.
+     * @param limit Maximum number of pairs to return.
      * @return pairResults Array of PairResult structures.
      */
-    function getPairs(
+    function getPairsWithPagination(
         uint256 offset,
         uint256 limit
     ) external view returns (PairResult[] memory pairResults) {
         uint256 end = offset + limit;
         if (end > pairKeys.length) end = pairKeys.length;
         pairResults = new PairResult[](end - offset);
-        bytes32[] memory keys = new bytes32[](end - offset);
         for (uint256 i = 0; i < end - offset; i++) {
-            keys[i] = pairKeys[i + offset];
-        }
-        for (uint256 i = 0; i < end - offset; i++) {
-            pairResults[i] = _getPair(keys[i]);
+            pairResults[i] = _getPair(pairKeys[i + offset]);
         }
     }
 

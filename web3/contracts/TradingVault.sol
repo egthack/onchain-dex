@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/ITradingVault.sol";
@@ -18,7 +18,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
-    IMatchingEngine public engine;
+    IMatchingEngine public immutable engine;
     // 注文IDごとにロックした金額を保存
     mapping(uint256 => uint256) private lockedAmounts;
 
@@ -41,7 +41,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         address token,
         uint256 amount
     ) external override nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
+        require(amount > 0, "Amount must be > 0");
 
         bool success = IERC20(token).transferFrom(
             msg.sender,
@@ -61,7 +61,8 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         address token,
         uint256 amount
     ) external override nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
+        // ゼロ金額の引き出しを許可
+        if (amount == 0) return;
         require(balances[msg.sender][token] >= amount, "Insufficient balance");
 
         balances[msg.sender][token] -= amount;
@@ -100,7 +101,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         address user,
         address token,
         uint256 amount
-    ) external onlyMatchingEngine nonReentrant {
+    ) external onlyMatchingEngine {
         balances[user][token] -= amount;
     }
 
@@ -111,7 +112,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         address user,
         address token,
         uint256 amount
-    ) external onlyMatchingEngine nonReentrant {
+    ) external onlyMatchingEngine {
         balances[user][token] += amount;
     }
 
@@ -124,6 +125,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         VaultLib.checkTradeRequest(req);
 
+        // 1. トークンのロックと注文の作成
         uint256 lockedAmount = _lockTokens(req);
         uint256 orderId = engine.placeOrder(
             req.user,
@@ -135,8 +137,18 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         );
         lockedAmounts[orderId] = lockedAmount;
 
-        // マッチング処理を分離
+        // 2. 注文作成後すぐにマッチング処理を実行
         engine.matchOrder(orderId);
+
+        emit OrderPlaced(
+            orderId,
+            req.user,
+            req.side,
+            req.base,
+            req.quote,
+            req.price,
+            req.amount
+        );
     }
 
     /**
