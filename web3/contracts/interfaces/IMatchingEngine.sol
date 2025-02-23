@@ -50,6 +50,11 @@ interface IMatchingEngine {
         address quote
     ) external view returns (bytes32);
 
+    function addPair(
+        address base,
+        address quote
+    ) external;
+
     /**
      * @notice Returns the best (lowest) sell price for a given pair
      * @param pairId The trading pair identifier
