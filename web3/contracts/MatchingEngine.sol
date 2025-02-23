@@ -56,11 +56,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
     // Array of pair IDs for front-end iteration.
     bytes32[] public pairKeys;
-    // Mapping: pair ID => Pair (Base Tokenddresses and decimals).
     struct Pair {
         address[2] tokenz; // [base, quote].
         uint256[2] decimals; // [base decimals, quote decimals].
+        bool active; // ペアが有効かどうかのフラグ
     }
+    // Mapping: pair ID => Pair
     mapping(bytes32 => Pair) internal pairs;
 
     // Maximum iterations for matching to prevent out-of-gas.
@@ -95,20 +96,30 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         _;
     }
 
+    function getPairId(address base, address quote) external view returns (bytes32) {
+        bytes32 pairId = _generatePairId(base, quote);
+        require(pairs[pairId].tokenz[0] != address(0) && pairs[pairId].active, "Pair not active or not exist");
+        return pairId;
+    }
+
     // Utility: Compute a unique pair ID from base and quote.
-    function getPairId(
-        address base,
-        address quote
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(base, quote));
+    function _generatePairId(address base, address quote) internal pure returns (bytes32) {
+    require(base != address(0) && quote != address(0), "Invalid address");
+    require(base != quote, "Identical addresses");
+    // 固定順序にし、お互いのアドレスが逆の組み合わせでも同じペアIDになるようにして重複を防ぐ
+    return base < quote 
+        ? keccak256(abi.encodePacked(base, quote)) 
+        : keccak256(abi.encodePacked(quote, base));
     }
 
     function getBestSellPrice(bytes32 pairId) external view returns (uint256) {
+        require(pairs[pairId].tokenz[0] != address(0) && pairs[pairId].active, "Invalid pair");
         OrderBook storage ob = orderBooks[pairId];
         return ob.sellTree.getMin();
     }
 
     function getBestBuyPrice(bytes32 pairId) external view returns (uint256) {
+        require(pairs[pairId].tokenz[0] != address(0) && pairs[pairId].active, "Invalid pair");
         OrderBook storage ob = orderBooks[pairId];
         return ob.buyTree.getMax();
     }
@@ -119,24 +130,38 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
      * @notice Adds a new trading pair.
      * @param base token being sold (base).
      * @param quote token being bought (quote).
-     * @param decimalsBase Decimals for base.
-     * @param decimalsQuote Decimals for quote.
      */
     function addPair(
         address base,
-        address quote,
-        uint256 decimalsBase,
-        uint256 decimalsQuote
+        address quote
     ) external onlyOwner {
-        bytes32 pairId = getPairId(base, quote);
+        bytes32 pairId = _generatePairId(base, quote);
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
-        pairs[pairId] = Pair([base, quote], [decimalsBase, decimalsQuote]);
+        uint256 decimalsBase = IERC20(base).decimals();
+        uint256 decimalsQuote = IERC20(quote).decimals();
+        pairs[pairId] = Pair({tokenz: [base, quote], decimals: [decimalsBase, decimalsQuote], active: true});
         pairKeys.push(pairId);
         emit PairAdded(
             pairId,
             base,
             quote,
             [decimalsBase, decimalsQuote],
+            block.timestamp
+        );
+    }
+
+    /**
+     * @notice Removes a trading pair
+     * @param pairId pair id
+     */
+    function removePair(bytes32 pairId) external onlyOwner {
+        require(pairs[pairId].tokenz[0] != address(0), "Pair does not exist");
+        require(pairs[pairId].active, "Pair already inactive");
+        pairs[pairId].active = false;
+        emit PairRemoved(
+            pairId, 
+            pairs[pairId].tokenz[0], 
+            pairs[pairId].tokenz[1],
             block.timestamp
         );
     }
@@ -162,6 +187,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 price
     ) external onlyVault nonReentrant returns (uint256) {
         require(amount > 0, "Amount must be > 0");
+        bytes32 pairId = _generatePairId(base, quote);
+        require(pairs[pairId].tokenz[0] != address(0) && pairs[pairId].active, "Invalid pair");
 
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -177,7 +204,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             next: 0
         });
 
-        bytes32 pairId = getPairId(base, quote);
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
             ob.buyOrdersAtPrice[price].push(orderId);
@@ -195,7 +221,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     }
 
     function matchOrder(uint256 orderId) external onlyVault nonReentrant {
-        bytes32 pairId = getPairId(orders[orderId].base, orders[orderId].quote);
+        bytes32 pairId = _generatePairId(orders[orderId].base, orders[orderId].quote);
         _matchOrder(pairId, orderId);
     }
 
@@ -461,7 +487,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         Order storage order = orders[orderId];
         require(order.active, "Order is not active");
 
-        bytes32 pairId = getPairId(order.base, order.quote);
+        bytes32 pairId = _generatePairId(order.base, order.quote);
         OrderBook storage ob = orderBooks[pairId];
         if (order.side == OrderSide.Buy) {
             ob.buyTree.remove(order.price);

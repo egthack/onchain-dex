@@ -15,8 +15,10 @@ describe("MatchingEngine", function () {
   let trader2: Signer;
   let matchingEngine: MatchingEngine;
   let vault: TradingVault;
-  let baseToken: MockERC20;
-  let quoteToken: MockERC20;
+  let baseTokenA: MockERC20;
+  let baseTokenB: MockERC20;
+  let quoteTokenA: MockERC20;
+  let quoteTokenB: MockERC20;
 
   beforeEach(async function () {
     const signers = await ethers.getSigners();
@@ -27,19 +29,33 @@ describe("MatchingEngine", function () {
     // --- ERC20 トークンのデプロイ (MockERC20) ---
     const TokenFactory = await ethers.getContractFactory("MockERC20");
     // BTCとかETHとか
-    baseToken = await TokenFactory.connect(admin).deploy(
-      "Base Token",
-      "BASE",
+    baseTokenA = await TokenFactory.connect(admin).deploy(
+      "Base Token A",
+      "BASEA",
       100000000
     );
-    await baseToken.waitForDeployment();
+    await baseTokenA.waitForDeployment();
     // USDとかJPYとか
-    quoteToken = await TokenFactory.connect(admin).deploy(
-      "Quote Token",
-      "QUOTE",
+    quoteTokenA = await TokenFactory.connect(admin).deploy(
+      "Quote Token A",
+      "QUOTEA",
       100000000
     );
-    await quoteToken.waitForDeployment();
+    await quoteTokenA.waitForDeployment();
+
+    baseTokenB = await TokenFactory.connect(admin).deploy(
+      "Base Token B",
+      "BASEB",
+      100000000
+    );
+    await baseTokenB.waitForDeployment();
+
+    quoteTokenB = await TokenFactory.connect(admin).deploy(
+      "Quote Token B",
+      "QUOTEB",
+      100000000
+    );
+    await quoteTokenA.waitForDeployment();
 
     // --- MatchingEngine のデプロイ ---
     const MatchingEngineFactory = await ethers.getContractFactory(
@@ -62,86 +78,85 @@ describe("MatchingEngine", function () {
       .setVaultAddress(await vault.getAddress());
 
     // --- Trading Pair の追加 ---
-    // baseToken を base、quoteToken を quote として decimals は両方とも 18 とする
     await matchingEngine
       .connect(admin)
       .addPair(
-        await baseToken.getAddress(),
-        await quoteToken.getAddress(),
-        18,
-        18
+        await baseTokenA.getAddress(),
+        await quoteTokenA.getAddress()
       );
 
-    await baseToken.connect(admin).transfer(await user.getAddress(), 10000);
-    await baseToken.connect(user).approve(await vault.getAddress(), 10000);
-    await vault.connect(user).deposit(await baseToken.getAddress(), 10000);
+    await baseTokenA.connect(admin).transfer(await user.getAddress(), 10000);
+    await baseTokenA.connect(user).approve(await vault.getAddress(), 10000);
+    await vault.connect(user).deposit(await baseTokenA.getAddress(), 10000);
 
-    await baseToken.connect(admin).transfer(await trader.getAddress(), 10000);
-    await baseToken.connect(trader).approve(await vault.getAddress(), 10000);
-    await vault.connect(trader).deposit(await baseToken.getAddress(), 10000);
-
-    // trader2 の初期設定を追加
-    await baseToken.connect(admin).transfer(await trader2.getAddress(), 10000);
-    await baseToken.connect(trader2).approve(await vault.getAddress(), 10000);
-    await vault.connect(trader2).deposit(await baseToken.getAddress(), 10000);
-
-    await quoteToken.connect(admin).transfer(await user.getAddress(), 10000);
-    await quoteToken.connect(user).approve(await vault.getAddress(), 10000);
-    await vault.connect(user).deposit(await quoteToken.getAddress(), 10000);
-
-    await quoteToken.connect(admin).transfer(await trader.getAddress(), 10000);
-    await quoteToken.connect(trader).approve(await vault.getAddress(), 10000);
-    await vault.connect(trader).deposit(await quoteToken.getAddress(), 10000);
+    await baseTokenA.connect(admin).transfer(await trader.getAddress(), 10000);
+    await baseTokenA.connect(trader).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader).deposit(await baseTokenA.getAddress(), 10000);
 
     // trader2 の初期設定を追加
-    await quoteToken.connect(admin).transfer(await trader2.getAddress(), 10000);
-    await quoteToken.connect(trader2).approve(await vault.getAddress(), 10000);
-    await vault.connect(trader2).deposit(await quoteToken.getAddress(), 10000);
+    await baseTokenA.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await baseTokenA.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await baseTokenA.getAddress(), 10000);
+
+    await quoteTokenA.connect(admin).transfer(await user.getAddress(), 10000);
+    await quoteTokenA.connect(user).approve(await vault.getAddress(), 10000);
+    await vault.connect(user).deposit(await quoteTokenA.getAddress(), 10000);
+
+    await quoteTokenA.connect(admin).transfer(await trader.getAddress(), 10000);
+    await quoteTokenA.connect(trader).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader).deposit(await quoteTokenA.getAddress(), 10000);
+
+    // trader2 の初期設定を追加
+    await quoteTokenA.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await quoteTokenA.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await quoteTokenA.getAddress(), 10000);
   });
 
   describe("Pair Management", function () {
     it("should add a new pair and retrieve pair info", async function () {
       const pair = await matchingEngine.getPair(0);
       expect(pair.pairId).to.exist;
-      expect(pair.tokenz[0]).to.equal(await baseToken.getAddress());
-      expect(pair.tokenz[1]).to.equal(await quoteToken.getAddress());
+      expect(pair.tokenz[0]).to.equal(await baseTokenA.getAddress());
+      expect(pair.tokenz[1]).to.equal(await quoteTokenA.getAddress());
       expect(pair.decimals[0]).to.equal(18);
       expect(pair.decimals[1]).to.equal(18);
     });
 
     it("should return an array of pairs with getPairs()", async function () {
-      // ダミーの別ペアとして、逆順 (quoteToken, baseToken) を追加
+      // 別のペアを追加
       await matchingEngine
         .connect(admin)
         .addPair(
-          await quoteToken.getAddress(),
-          await baseToken.getAddress(),
-          8,
-          8
+          await baseTokenB.getAddress(),
+          await quoteTokenB.getAddress()
         );
       const pairs = await matchingEngine.getPairsWithPagination(0, 10);
       expect(pairs.length).to.equal(2);
 
       // ペアの内容検証
-      expect(pairs[0].tokenz[0]).to.equal(await baseToken.getAddress());
-      expect(pairs[0].tokenz[1]).to.equal(await quoteToken.getAddress());
+      expect(pairs[0].tokenz[0]).to.equal(await baseTokenA.getAddress());
+      expect(pairs[0].tokenz[1]).to.equal(await quoteTokenA.getAddress());
+      
+      // 2番目のペアの検証を追加
+      expect(pairs[1].tokenz[0]).to.equal(await baseTokenB.getAddress());
+      expect(pairs[1].tokenz[1]).to.equal(await quoteTokenB.getAddress());
     });
   });
 
   describe("Order Creation via Vault", function () {
     it("should create a buy order properly through vault", async function () {
       // --- user によるトークン入金の準備 ---
-      await baseToken.connect(admin).transfer(await user.getAddress(), 1000);
-      await baseToken.connect(user).approve(await vault.getAddress(), 500);
-      await vault.connect(user).deposit(await baseToken.getAddress(), 100);
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), 1000);
+      await baseTokenA.connect(user).approve(await vault.getAddress(), 500);
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100);
 
       // --- Trade Request の作成 (Buy order: side = 0) ---
       // この例では amount = 100, price = 1 とする
       // Traderが
       const tradeRequest = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 1,
@@ -155,8 +170,8 @@ describe("MatchingEngine", function () {
       expect(order.id).to.equal(0);
       // トレーダー (trader) が executeTradeBatch を実行したが、取引は は user（委任者） になる
       expect(order.user).to.equal(await user.getAddress());
-      expect(order.base).to.equal(await baseToken.getAddress());
-      expect(order.quote).to.equal(await quoteToken.getAddress());
+      expect(order.base).to.equal(await baseTokenA.getAddress());
+      expect(order.quote).to.equal(await quoteTokenA.getAddress());
       // _executeSingleTrade で注文価格として amount をそのまま price にしている前提（簡易例）
       expect(order.price).to.equal(1);
       expect(order.amount).to.equal(100);
@@ -168,8 +183,8 @@ describe("MatchingEngine", function () {
       // この例では amount = 100, price = 1 とする
       const tradeRequest = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 100,
         price: 1,
@@ -181,8 +196,8 @@ describe("MatchingEngine", function () {
       const order = await matchingEngine.getOrder(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await user.getAddress());
-      expect(order.base).to.equal(await baseToken.getAddress());
-      expect(order.quote).to.equal(await quoteToken.getAddress());
+      expect(order.base).to.equal(await baseTokenA.getAddress());
+      expect(order.quote).to.equal(await quoteTokenA.getAddress());
       expect(order.price).to.equal(1);
       expect(order.amount).to.equal(100);
       expect(order.active).to.equal(true);
@@ -192,8 +207,8 @@ describe("MatchingEngine", function () {
       await expect(
         matchingEngine.connect(user).placeOrder(
           await user.getAddress(),
-          await baseToken.getAddress(),
-          await quoteToken.getAddress(),
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress(),
           0, // side Buy
           100,
           1
@@ -208,8 +223,8 @@ describe("MatchingEngine", function () {
       // 1つ目： price = 1, amount = 100
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 30,
         price: 1,
@@ -219,8 +234,8 @@ describe("MatchingEngine", function () {
       // 2つ目： price = 2, amount = 100
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 5,
         price: 2,
@@ -229,8 +244,8 @@ describe("MatchingEngine", function () {
 
       // --- best order の検証 ---
       const pairId = await matchingEngine.getPairId(
-        await baseToken.getAddress(),
-        await quoteToken.getAddress()
+        await baseTokenA.getAddress(),
+        await quoteTokenA.getAddress()
       );
       const bestBuy = await matchingEngine.getBestOrder(pairId, 0);
       // 複数注文中、price が高い方（この例では 2）の注文が返ると仮定
@@ -243,8 +258,8 @@ describe("MatchingEngine", function () {
       // --- 事前に注文作成 ---
       const tradeRequest = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 1,
@@ -266,8 +281,8 @@ describe("MatchingEngine", function () {
       // baseToken を 100 トークンprice 2で買うのでquoteToken 200トークンが出る
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 2,
@@ -277,8 +292,8 @@ describe("MatchingEngine", function () {
       // baseToken を 100 トークンprice 2で売るのでquoteToken 200トークンが入る
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 100,
         price: 2,
@@ -302,8 +317,8 @@ describe("MatchingEngine", function () {
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
-        baseToken,
-        quoteToken
+        baseTokenA,
+        quoteTokenA
       );
       expect(userBalanceBase).to.equal(10100);
       expect(userBalanceQuote).to.equal(9800);
@@ -311,7 +326,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       expect(traderBalanceBase).to.equal(9900);
       expect(traderBalanceQuote).to.equal(10200);
     });
@@ -320,8 +335,8 @@ describe("MatchingEngine", function () {
     it("should match orders correctly with sell order", async function () {
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 100,
         price: 2,
@@ -330,8 +345,8 @@ describe("MatchingEngine", function () {
 
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 2,
@@ -355,8 +370,8 @@ describe("MatchingEngine", function () {
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
-        baseToken,
-        quoteToken
+        baseTokenA,
+        quoteTokenA
       );
       expect(userBalanceBase).to.equal(9900);
       expect(userBalanceQuote).to.equal(10200);
@@ -364,7 +379,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       expect(traderBalanceBase).to.equal(10100);
       expect(traderBalanceQuote).to.equal(9800);
     });
@@ -373,8 +388,8 @@ describe("MatchingEngine", function () {
     it("should match orders with partial fill", async function () {
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 1,
@@ -383,8 +398,8 @@ describe("MatchingEngine", function () {
 
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 50,
         price: 1,
@@ -401,8 +416,8 @@ describe("MatchingEngine", function () {
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
-        baseToken,
-        quoteToken
+        baseTokenA,
+        quoteTokenA
       );
       expect(userBalanceBase).to.equal(10050);
       expect(userBalanceQuote).to.equal(9900);
@@ -410,15 +425,15 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       expect(traderBalanceBase).to.equal(9950);
       expect(traderBalanceQuote).to.equal(10050);
 
       // 繰り返しマッチング
       const tradeRequest3 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 50,
         price: 1,
@@ -435,7 +450,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: userBalanceBase2,
         userBalanceQuote: userBalanceQuote2,
-      } = await getTokenBalances(vault, user, baseToken, quoteToken);
+      } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
       expect(userBalanceBase2).to.equal(10100);
       expect(userBalanceQuote2).to.equal(9900);
 
@@ -443,7 +458,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase2,
         userBalanceQuote: traderBalanceQuote2,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       expect(traderBalanceBase2).to.equal(9900);
       expect(traderBalanceQuote2).to.equal(10100);
     });
@@ -452,8 +467,8 @@ describe("MatchingEngine", function () {
     it("should match orders with market order", async function () {
       const tradeRequest1 = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0,
         amount: 100,
         price: 1,
@@ -462,8 +477,8 @@ describe("MatchingEngine", function () {
 
       const tradeRequest2 = await createTradeRequest({
         user: trader,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 1,
         amount: 100,
         price: 1,
@@ -482,8 +497,8 @@ describe("MatchingEngine", function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 2,
@@ -492,8 +507,8 @@ describe("MatchingEngine", function () {
         // 成行買い注文を実行
         const marketBuyOrder = await createTradeRequest({
           user: user,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 0, // Buy
           amount: 50,
           price: 0, // Market order
@@ -509,8 +524,8 @@ describe("MatchingEngine", function () {
         const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
           vault,
           user,
-          baseToken,
-          quoteToken
+          baseTokenA,
+          quoteTokenA
         );
         // base: 10025(50/2=25 bought), quote: 9950(50 used)
         expect(userBalanceBase).to.equal(10025);
@@ -518,7 +533,7 @@ describe("MatchingEngine", function () {
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
-        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9900(75 locked, 25 sold), quote: 10050(50 returned)
         expect(traderBalanceBase).to.equal(9900);
         expect(traderBalanceQuote).to.equal(10050);
@@ -528,7 +543,7 @@ describe("MatchingEngine", function () {
         const {
           userBalanceBase: traderBalanceBase2,
           userBalanceQuote: traderBalanceQuote2,
-        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9975(9900 + 25 bought 50 locked), quote: 10050(50 returned)
         expect(traderBalanceBase2).to.equal(9975);
         expect(traderBalanceQuote2).to.equal(10050);
@@ -539,8 +554,8 @@ describe("MatchingEngine", function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 2,
@@ -549,8 +564,8 @@ describe("MatchingEngine", function () {
         // 成行買い注文を実行
         const marketSellOrder = await createTradeRequest({
           user: user,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 0, // Buy
           amount: 300,
           price: 0, // Market order
@@ -566,13 +581,13 @@ describe("MatchingEngine", function () {
         const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
           vault,
           user,
-          baseToken,
-          quoteToken
+          baseTokenA,
+          quoteTokenA
         );
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
-        } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
         // base: 9900(100 returned), quote: 10200(200 returned)
         expect(userBalanceBase).to.equal(10100);
@@ -586,8 +601,8 @@ describe("MatchingEngine", function () {
         // 最良売り注文を作成 (price = 1)
         const bestSellOrder = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 1,
@@ -597,8 +612,8 @@ describe("MatchingEngine", function () {
         // 次に高い売り注文を作成 (price = 2)
         const secondSellOrder = await createTradeRequest({
           user: trader2,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 2,
@@ -607,8 +622,8 @@ describe("MatchingEngine", function () {
 
         // オーダーブックの最良売り注文を確認
         const pairId = await matchingEngine.getPairId(
-          await baseToken.getAddress(),
-          await quoteToken.getAddress()
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress()
         );
         const bestSellBefore = await matchingEngine.getBestOrder(pairId, 1); // side = 1 for sell
         expect(bestSellBefore.price).to.equal(1);
@@ -616,8 +631,8 @@ describe("MatchingEngine", function () {
         // 成行買い注文を実行
         const marketBuyOrder = await createTradeRequest({
           user: user,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 0, // Buy
           amount: 100,
           price: 0, // Market order
@@ -639,8 +654,8 @@ describe("MatchingEngine", function () {
         const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
           vault,
           user,
-          baseToken,
-          quoteToken
+          baseTokenA,
+          quoteTokenA
         );
         expect(userBalanceBase).to.equal(10100); // 初期値10000 + 買った100
         expect(userBalanceQuote).to.equal(9900); // 初期値10000 - 支払った100
@@ -652,67 +667,67 @@ describe("MatchingEngine", function () {
     beforeEach(async function () {
       const requiredAmount = 190000; // 最初のbeforeEachと合わせて200000にする
       // traderにも同じ量を付与
-      await baseToken
+      await baseTokenA
         .connect(admin)
         .transfer(await user.getAddress(), requiredAmount);
-      await baseToken
+      await baseTokenA
         .connect(user)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(user)
-        .deposit(await baseToken.getAddress(), requiredAmount);
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
 
-      await quoteToken
+      await quoteTokenA
         .connect(admin)
         .transfer(await user.getAddress(), requiredAmount);
-      await quoteToken
+      await quoteTokenA
         .connect(user)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(user)
-        .deposit(await quoteToken.getAddress(), requiredAmount);
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
 
       // traderにも必要な量を付与
-      await baseToken
+      await baseTokenA
         .connect(admin)
         .transfer(await trader.getAddress(), requiredAmount);
-      await baseToken
+      await baseTokenA
         .connect(trader)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(trader)
-        .deposit(await baseToken.getAddress(), requiredAmount);
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
 
-      await quoteToken
+      await quoteTokenA
         .connect(admin)
         .transfer(await trader.getAddress(), requiredAmount);
-      await quoteToken
+      await quoteTokenA
         .connect(trader)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(trader)
-        .deposit(await quoteToken.getAddress(), requiredAmount);
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
 
       // trader2にも同じ量を付与
-      await baseToken
+      await baseTokenA
         .connect(admin)
         .transfer(await trader2.getAddress(), requiredAmount);
-      await baseToken
+      await baseTokenA
         .connect(trader2)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(trader2)
-        .deposit(await baseToken.getAddress(), requiredAmount);
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
 
-      await quoteToken
+      await quoteTokenA
         .connect(admin)
         .transfer(await trader2.getAddress(), requiredAmount);
-      await quoteToken
+      await quoteTokenA
         .connect(trader2)
         .approve(await vault.getAddress(), requiredAmount);
       await vault
         .connect(trader2)
-        .deposit(await quoteToken.getAddress(), requiredAmount);
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
     });
 
     it("should match orders correctly with bulk matching", async function () {
@@ -724,8 +739,8 @@ describe("MatchingEngine", function () {
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 1,
@@ -739,8 +754,8 @@ describe("MatchingEngine", function () {
       for (let i = 0; i < BATCH_SIZE; i++) {
         const tradeRequest = await createTradeRequest({
           user: user,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 0, // Buy
           amount: 100,
           price: 1,
@@ -768,8 +783,8 @@ describe("MatchingEngine", function () {
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
           price: 1,
@@ -780,8 +795,8 @@ describe("MatchingEngine", function () {
       // 成行買い注文を実行
       const marketBuyOrder = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0, // Buy
         amount: 20000,
         price: 0, // Market order
@@ -791,8 +806,8 @@ describe("MatchingEngine", function () {
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
-        baseToken,
-        quoteToken
+        baseTokenA,
+        quoteTokenA
       );
       // 200000(今回付与) + 20000(成行買い注文約定) = 220000
       expect(userBalanceBase).to.equal(220000);
@@ -802,7 +817,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       // 200000(今回付与) - 20000(売り注文約定) = 180000
       expect(traderBalanceBase).to.equal(180000);
       // 200000(今回付与) + 20000(売り注文約定 × 価格1) = 220000
@@ -819,8 +834,8 @@ describe("MatchingEngine", function () {
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,
-          base: baseToken,
-          quote: quoteToken,
+          base: baseTokenA,
+          quote: quoteTokenA,
           side: 1, // Sell
           amount: 10,
           price: 1 + i,
@@ -832,8 +847,8 @@ describe("MatchingEngine", function () {
       // 合計 2000 * 200 = 4000000がhi
       const tradeRequest = await createTradeRequest({
         user: user,
-        base: baseToken,
-        quote: quoteToken,
+        base: baseTokenA,
+        quote: quoteTokenA,
         side: 0, // Buy
         amount: 1000,
         price: 200,
@@ -849,8 +864,8 @@ describe("MatchingEngine", function () {
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
-        baseToken,
-        quoteToken
+        baseTokenA,
+        quoteTokenA
       );
       // 200000(初期保有量) + 1000(userが食った量) = 201000
       expect(userBalanceBase).to.equal(201000);
@@ -860,7 +875,7 @@ describe("MatchingEngine", function () {
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
-      } = await getTokenBalances(vault, trader, baseToken, quoteToken);
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       // 200000(初期保有量) - 2000(locked) = 198000
       expect(traderBalanceBase).to.equal(198000);
       // 並べた板のうち、価格が低いものからamountが1000になるまで、すなわちpriceが1-100までマッチしたはず

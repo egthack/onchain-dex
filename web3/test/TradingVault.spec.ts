@@ -48,7 +48,7 @@ describe("TradingVault", function () {
 
     // Add a trading pair into the MatchingEngine.
     // ここでは、base と quote の両方に同じ token.address を指定する
-    await engine.connect(owner).addPair(baseToken.getAddress(), quoteToken.getAddress(), 18, 18);
+    await engine.connect(owner).addPair(baseToken.getAddress(), quoteToken.getAddress());
 
     // Deploy TradingVault with the engine address
     const VaultFactory = await ethers.getContractFactory("TradingVault");
