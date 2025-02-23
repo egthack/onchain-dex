@@ -244,39 +244,43 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                         ? remaining
                         : sellOrder.amount;
 
-                    // 状態変更を先に行う
-                    sellOrder.amount -= fill;
-                    sellOrder.active = false;
-                    remaining -= fill;
-                    if (sellOrder.amount == 0) {
-                        sellList[i] = sellList[sellList.length - 1];
-                        sellList.pop();
-                    } else {
-                        i++;
+                    // 約定が成立する場合のみ処理を実行
+                    if (fill > 0) {
+                        // 状態変更を先に行う
+                        sellOrder.amount -= fill;
+                        sellOrder.active = (sellOrder.amount > 0);
+                        remaining -= fill;
+                        if (sellOrder.amount == 0) {
+                            sellList[i] = sellList[sellList.length - 1];
+                            sellList.pop();
+                        } else {
+                            i++;
+                        }
+
+                        // クレジット情報を保存
+                        creditQueue[creditCount++] = CreditInfo({
+                            user: incoming.user,
+                            token: incoming.base,
+                            amount: fill
+                        });
+                        creditQueue[creditCount++] = CreditInfo({
+                            user: sellOrder.user,
+                            token: incoming.quote,
+                            amount: fill * bestSellPrice
+                        });
+
+                        // 約定が成立した場合のみイベント発行
+                        emit TradeExecuted(
+                            orderId,
+                            sellOrderId,
+                            incoming.base,
+                            incoming.quote,
+                            bestSellPrice,
+                            fill,
+                            0,
+                            0
+                        );
                     }
-
-                    // クレジット情報を保存
-                    creditQueue[creditCount++] = CreditInfo({
-                        user: incoming.user,
-                        token: incoming.base,
-                        amount: fill
-                    });
-                    creditQueue[creditCount++] = CreditInfo({
-                        user: sellOrder.user,
-                        token: incoming.quote,
-                        amount: fill * bestSellPrice
-                    });
-
-                    emit TradeExecuted(
-                        orderId,
-                        sellOrderId,
-                        incoming.base,
-                        incoming.quote,
-                        bestSellPrice,
-                        fill,
-                        0,
-                        0
-                    );
                 }
                 if (sellList.length == 0) {
                     ob.sellTree.remove(bestSellPrice);
@@ -305,38 +309,42 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                         ? remaining
                         : buyOrder.amount;
 
-                    buyOrder.amount -= fill;
-                    buyOrder.active = false;
-                    remaining -= fill;
-                    if (buyOrder.amount == 0) {
-                        buyList[i] = buyList[buyList.length - 1];
-                        buyList.pop();
-                    } else {
-                        i++;
+                    // 約定が成立する場合のみ処理を実行
+                    if (fill > 0) {
+                        buyOrder.amount -= fill;
+                        buyOrder.active = (buyOrder.amount > 0);
+                        remaining -= fill;
+                        if (buyOrder.amount == 0) {
+                            buyList[i] = buyList[buyList.length - 1];
+                            buyList.pop();
+                        } else {
+                            i++;
+                        }
+
+                        // クレジット情報を保存
+                        creditQueue[creditCount++] = CreditInfo({
+                            user: incoming.user,
+                            token: incoming.quote,
+                            amount: fill * bestBuyPrice
+                        });
+                        creditQueue[creditCount++] = CreditInfo({
+                            user: buyOrder.user,
+                            token: incoming.base,
+                            amount: fill
+                        });
+
+                        // 約定が成立した場合のみイベント発行
+                        emit TradeExecuted(
+                            buyOrderId,
+                            orderId,
+                            incoming.base,
+                            incoming.quote,
+                            bestBuyPrice,
+                            fill,
+                            0,
+                            0
+                        );
                     }
-
-                    // クレジット情報を保存
-                    creditQueue[creditCount++] = CreditInfo({
-                        user: incoming.user,
-                        token: incoming.quote,
-                        amount: fill * bestBuyPrice
-                    });
-                    creditQueue[creditCount++] = CreditInfo({
-                        user: buyOrder.user,
-                        token: incoming.base,
-                        amount: fill
-                    });
-
-                    emit TradeExecuted(
-                        buyOrderId,
-                        orderId,
-                        incoming.base,
-                        incoming.quote,
-                        bestBuyPrice,
-                        fill,
-                        0,
-                        0
-                    );
                 }
                 if (buyList.length == 0) {
                     ob.buyTree.remove(bestBuyPrice);
