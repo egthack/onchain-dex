@@ -12,7 +12,7 @@ export interface TradeRequest {
   price: number;
   side: number;
   signature: string;
-} 
+}
 
 describe("TradingVault", function () {
   let owner: Signer;
@@ -23,7 +23,6 @@ describe("TradingVault", function () {
   let vault: TradingVault;
   let engine: MatchingEngine;
 
-
   const deployFixture = async () => {
     const signers = await ethers.getSigners();
     owner = signers[0];
@@ -32,9 +31,19 @@ describe("TradingVault", function () {
 
     // Deploy MockERC20 token
     const TokenFactory = await ethers.getContractFactory("MockERC20");
-    baseToken = await TokenFactory.connect(owner).deploy("Mock Base Token", "MBASE", 1000000);
+    baseToken = await TokenFactory.connect(owner).deploy(
+      "Mock Base Token",
+      "MBASE",
+      1000000,
+      18
+    );
     await baseToken.waitForDeployment();
-    quoteToken = await TokenFactory.connect(owner).deploy("Mock Quote Token", "MQUOTE", 1000000);
+    quoteToken = await TokenFactory.connect(owner).deploy(
+      "Mock Quote Token",
+      "MQUOTE",
+      1000000,
+      6
+    );
     await quoteToken.waitForDeployment();
 
     // Transfer some tokens to user for deposit tests
@@ -48,7 +57,9 @@ describe("TradingVault", function () {
 
     // Add a trading pair into the MatchingEngine.
     // ここでは、base と quote の両方に同じ token.address を指定する
-    await engine.connect(owner).addPair(baseToken.getAddress(), quoteToken.getAddress(), 18, 18);
+    await engine
+      .connect(owner)
+      .addPair(baseToken.getAddress(), quoteToken.getAddress());
 
     // Deploy TradingVault with the engine address
     const VaultFactory = await ethers.getContractFactory("TradingVault");
@@ -69,7 +80,10 @@ describe("TradingVault", function () {
       // user 承認後、100 トークンを deposit する
       await baseToken.connect(user).approve(await vault.getAddress(), 200);
       await vault.connect(user).deposit(baseToken.getAddress(), 100);
-      const balance = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      const balance = await vault.getBalance(
+        await user.getAddress(),
+        baseToken.getAddress()
+      );
       expect(balance).to.equal(100);
     });
 
@@ -88,7 +102,10 @@ describe("TradingVault", function () {
 
     it("should allow withdrawal of tokens", async function () {
       await vault.connect(user).withdraw(baseToken.getAddress(), 50);
-      const balance = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      const balance = await vault.getBalance(
+        await user.getAddress(),
+        baseToken.getAddress()
+      );
       expect(balance).to.equal(50);
     });
 
@@ -99,9 +116,15 @@ describe("TradingVault", function () {
     });
 
     it("should allow withdrawal of zero tokens without changes", async function () {
-      const before = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      const before = await vault.getBalance(
+        await user.getAddress(),
+        baseToken.getAddress()
+      );
       await vault.connect(user).withdraw(baseToken.getAddress(), 0);
-      const after = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      const after = await vault.getBalance(
+        await user.getAddress(),
+        baseToken.getAddress()
+      );
       expect(after).to.equal(before);
     });
   });
@@ -119,7 +142,7 @@ describe("TradingVault", function () {
         quote: quoteToken,
         side: 0,
         amount: 100,
-        price: 1
+        price: 1,
       });
 
       // user が executeTradeBatch を実行 => MatchingEngine に注文が作成され、user の Vault から 100 トークンが引かれる
@@ -131,7 +154,10 @@ describe("TradingVault", function () {
       await vault.connect(user).cancelOrder(orderId);
 
       // キャンセル処理時、注文にロックされていた未約定の数量が Vault に返金される（テストでは 100 トークンが返金）
-      const balanceAfter = await vault.getBalance(await user.getAddress(), baseToken.getAddress());
+      const balanceAfter = await vault.getBalance(
+        await user.getAddress(),
+        baseToken.getAddress()
+      );
       expect(balanceAfter).to.equal(100);
 
       // MatchingEngine 側の注文はキャンセル済みとなっているはず

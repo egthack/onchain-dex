@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity ^0.8.20;
 
 /// @notice Interface for the MatchingEngine.
 interface IMatchingEngine {
@@ -49,6 +49,11 @@ interface IMatchingEngine {
         address base,
         address quote
     ) external view returns (bytes32);
+
+    function addPair(
+        address base,
+        address quote
+    ) external;
 
     /**
      * @notice Returns the best (lowest) sell price for a given pair
