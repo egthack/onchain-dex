@@ -4,19 +4,40 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        "trading-black": "#0A0A0F",
-        "trading-gray": "#14141F",
-        "trading-light": "#1E1E2D",
-        "accent-green": "#00E8B5",
-        "accent-red": "#FF4471",
-        "accent-blue": "#3B82F6",
+        // ダークモードのベース色
+        "trading-black": "#050B14",
+        "trading-gray": "#0A1628",
+        "trading-light": "#122236",
+
+        // アクセントカラー
+        "accent-primary": "#0EA5E9",
+        "accent-glow": "#38BDF8",
+        "accent-success": "#0284C7",
+        "accent-danger": "#E11D48",
+        "accent-green": "#0EA5E9",
+        "accent-blue": "#38BDF8",
+
+        // テキストカラー
+        "text-primary": "#F0F9FF",
+        "text-secondary": "#94A3B8",
+        "text-blue": "#7DD3FC",
       },
       fontFamily: {
         sans: ["Inter", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
       },
       boxShadow: {
-        glow: "0 0 20px rgba(0, 232, 181, 0.15)",
+        "glow-sm": "0 0 10px rgba(14, 165, 233, 0.2)",
+        glow: "0 0 20px rgba(14, 165, 233, 0.25)",
+        "glow-lg": "0 0 30px rgba(14, 165, 233, 0.3)",
+      },
+      backdropBlur: {
+        xs: "2px",
+      },
+      animation: {
+        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },
+  plugins: [],
 };

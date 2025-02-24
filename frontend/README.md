@@ -1,4 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RiseX Frontend
+
+Next.js based frontend for the RiseX decentralized trading platform.
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.example .env.local
+
+# Start development server
+npm run dev
+```
+
+## Deployment with AWS Amplify
+
+1. Fork or clone this repository
+2. Connect your repository to AWS Amplify
+3. Configure environment variables in Amplify Console:
+   - Go to App settings > Environment variables
+   - Add all variables from `.env.example`
+   - Update the values according to your environment
+
+### Build Settings
+
+The build settings are automatically configured by `amplify.yml` in the root directory:
+
+- Build command: `npm run build`
+- Output directory: `.next`
+- Node.js version: 18 (recommended)
+
+### Environment Variables
+
+Required environment variables for production:
+
+```bash
+NEXT_PUBLIC_RISE_SEPOLIA_RPC_URL=<your-rpc-url>
+NEXT_PUBLIC_RISE_SEPOLIA_CHAIN_ID=<chain-id>
+NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER=<explorer-url>
+NEXT_PUBLIC_ENABLE_TESTNETS=true
+```
+
+## Features
+
+- Wallet Connection (MetaMask)
+- Automatic Network Switching
+- Trading Interface
+- Order Book
+- Trade History
+- Dark Theme
 
 ## Getting Started
 
