@@ -17,4 +17,4 @@ applications:
           - node_modules/**/*
           - .next/cache/**/*
     appRoot: frontend
-    framework: Next.js - SSR
+    framework: "Next.js - SSR"
