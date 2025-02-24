@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-trading-black text-white font-sans text-sm;
+  }
+}
+
+@layer components {
+  .pair-button {
+    @apply px-3 py-1.5 rounded-lg transition-all duration-200 text-sm font-medium;
+  }
+  .pair-button.active {
+    @apply bg-accent-green text-black shadow-glow;
+  }
+  .pair-button:not(.active) {
+    @apply bg-trading-light text-white hover:bg-opacity-80;
+  }
+  .trading-input {
+    @apply w-full bg-trading-light rounded p-1.5 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-accent-green;
+  }
+  .section-title {
+    @apply text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2;
+  }
+  .gradient-text {
+    @apply text-transparent bg-clip-text bg-gradient-to-r from-accent-green to-accent-blue font-bold;
+  }
+}
