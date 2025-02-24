@@ -4,12 +4,12 @@ frontend:
     preBuild:
       commands:
         - cd frontend
-        - npm install         # yarn を利用する場合は "yarn install" に変更
+        - npm install         
     build:
       commands:
-        - npm run build       # package.json に定義された SSR 用の build コマンド
+        - npm run build       
   artifacts:
-    baseDirectory: frontend/.next    # ビルド後のディレクトリ。SSR モードの場合、.next 配下の内容を参照
+    baseDirectory: .next   
     files:
       - '**/*'
   cache:
