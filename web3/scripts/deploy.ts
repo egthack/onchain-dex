@@ -18,18 +18,18 @@ const main = async () => {
 
   const BaseTokenFactory = await ethers.getContractFactory("MockERC20");
   const baseToken = await BaseTokenFactory.connect(deployer).deploy(
-    "Base Token",
-    "BASE",
+    "WBTC",
+    "WBTC",
     1000000
   );
   await baseToken.waitForDeployment();
   deployedAddresses.contracts.baseToken = await baseToken.getAddress();
-  console.log("Base Token deployed to:", await baseToken.getAddress());
+  console.log("WBTC deployed to:", await baseToken.getAddress());
 
   const QuoteTokenFactory = await ethers.getContractFactory("MockERC20");
   const quoteToken = await QuoteTokenFactory.connect(deployer).deploy(
-    "Quote Token",
-    "QUOTE",
+    "USDC",
+    "USDC",
     1000000
   );
   await quoteToken.waitForDeployment();
@@ -65,12 +65,7 @@ const main = async () => {
   );
   await matchingEngine
     .connect(deployer)
-    .addPair(
-      await baseToken.getAddress(),
-      await quoteToken.getAddress(),
-      18,
-      18
-    );
+    .addPair(await baseToken.getAddress(), await quoteToken.getAddress());
   console.log(
     `Pair 
     ${await baseToken.symbol()} (${await baseToken.getAddress()}) / ${await quoteToken.symbol()} (${await quoteToken.getAddress()}) 

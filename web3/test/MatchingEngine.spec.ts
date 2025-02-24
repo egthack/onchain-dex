@@ -32,30 +32,34 @@ describe("MatchingEngine", function () {
     baseTokenA = await TokenFactory.connect(admin).deploy(
       "Base Token A",
       "BASEA",
-      100000000
+      100000000,
+      18
     );
     await baseTokenA.waitForDeployment();
     // USDとかJPYとか
     quoteTokenA = await TokenFactory.connect(admin).deploy(
       "Quote Token A",
       "QUOTEA",
-      100000000
+      100000000,
+      18
     );
     await quoteTokenA.waitForDeployment();
 
     baseTokenB = await TokenFactory.connect(admin).deploy(
       "Base Token B",
       "BASEB",
-      100000000
+      100000000,
+      18
     );
     await baseTokenB.waitForDeployment();
 
     quoteTokenB = await TokenFactory.connect(admin).deploy(
       "Quote Token B",
       "QUOTEB",
-      100000000
+      100000000,
+      6
     );
-    await quoteTokenA.waitForDeployment();
+    await quoteTokenB.waitForDeployment();
 
     // --- MatchingEngine のデプロイ ---
     const MatchingEngineFactory = await ethers.getContractFactory(
