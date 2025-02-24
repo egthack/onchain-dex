@@ -1,17 +1,20 @@
 version: 1
-frontend:
-  phases:
-    preBuild:
-      commands:
-        - cd frontend
-        - npm install         # yarn を利用する場合は "yarn install" に変更
-    build:
-      commands:
-        - npm run build       # package.json に定義された SSR 用の build コマンド
-  artifacts:
-    baseDirectory: .next    # ビルド後のディレクトリ。SSR モードの場合、.next 配下の内容を参照
-    files:
-      - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
+applications:
+  - frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm install
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: .next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - .next/cache/**/*
+    appRoot: frontend
+    framework: "Next.js - SSR"
