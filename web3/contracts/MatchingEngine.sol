@@ -491,7 +491,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 refundToken = order.base;
             }
 
-            // refundTokenが設定されていることを確認
         require(
                 refundAmount == 0 || refundToken != address(0),
                 "Invalid refund token"
