@@ -25,21 +25,21 @@ const main = async () => {
     WBTC: {
       name: "WBTC",
       symbol: "WBTC",
-      amount: BigInt(10000),
+      amount: BigInt(21000000),
       decimals: 8,
       address: "",
     },
     WETH: {
       name: "WETH",
       symbol: "WETH",
-      amount: BigInt(1000000),
+      amount: BigInt(10000000),
       decimals: 18,
       address: "",
     },
     POL: {
       name: "POL",
       symbol: "POL",
-      amount: BigInt(100000000),
+      amount: BigInt(1000000000),
       decimals: 18,
       address: "",
     },
@@ -53,7 +53,7 @@ const main = async () => {
     USDC: {
       name: "USDC",
       symbol: "USDC",
-      amount: BigInt(10000000000),
+      amount: BigInt(1000000000000),
       decimals: 6,
       address: "",
     },
