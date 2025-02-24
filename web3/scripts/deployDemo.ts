@@ -14,7 +14,10 @@ const main = async () => {
     network: hre.network.name,
     blockNumber: blockNumber,
     deployer: deployer.address,
-    contracts: {} as Record<string, string>,
+    contracts: {
+      tokens: {} as Record<string, string>,
+      trading: {} as Record<string, string>,
+    },
   };
 
   // WBTC, WETH, POL, TRUMP, USDC(quote)
@@ -64,7 +67,8 @@ const main = async () => {
       token.decimals
     );
     await baseToken.waitForDeployment();
-    deployedAddresses.contracts[token.symbol] = await baseToken.getAddress();
+    deployedAddresses.contracts.tokens[token.symbol] =
+      await baseToken.getAddress();
     console.log(`${token.symbol} deployed to:`, await baseToken.getAddress());
     token.address = await baseToken.getAddress();
   }
@@ -72,7 +76,7 @@ const main = async () => {
   const FaucetFactory = await ethers.getContractFactory("Faucet");
   const faucet = await FaucetFactory.connect(deployer).deploy();
   await faucet.waitForDeployment();
-  deployedAddresses.contracts.faucet = await faucet.getAddress();
+  deployedAddresses.contracts.tokens.faucet = await faucet.getAddress();
   console.log("Faucet deployed to:", await faucet.getAddress());
 
   for (const token of Object.values(tokens)) {
@@ -97,9 +101,6 @@ const main = async () => {
       .addToken(token.address, faucetAmount);
     await addTokenTx.wait(); // トランザクションの完了を待つ
     console.log(`Added ${faucetAmount} ${token.symbol} to Faucet`);
-
-    // トランザクション間で少し待機（オプション）
-    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 
   const MatchingEngineFactory = await ethers.getContractFactory(
@@ -110,7 +111,7 @@ const main = async () => {
     0
   );
   await matchingEngine.waitForDeployment();
-  deployedAddresses.contracts.matchingEngine =
+  deployedAddresses.contracts.trading.matchingEngine =
     await matchingEngine.getAddress();
   console.log("MatchingEngine deployed to:", await matchingEngine.getAddress());
 
@@ -119,7 +120,8 @@ const main = async () => {
     await matchingEngine.getAddress()
   );
   await tradingVault.waitForDeployment();
-  deployedAddresses.contracts.tradingVault = await tradingVault.getAddress();
+  deployedAddresses.contracts.trading.tradingVault =
+    await tradingVault.getAddress();
   console.log("TradingVault deployed to:", await tradingVault.getAddress());
 
   const setVaultTx = await matchingEngine
@@ -151,7 +153,7 @@ const main = async () => {
     hre.network.name
   );
   if (!fs.existsSync(deploymentPath)) {
-    fs.mkdirSync(deploymentPath);
+    fs.mkdirSync(deploymentPath, { recursive: true });
   }
 
   const filename = `deployment-${deployedAddresses.network}-${Date.now()}.json`;
