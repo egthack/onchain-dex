@@ -431,7 +431,7 @@ library RedBlackTreeLib {
     /**
      * @notice 指定のkeyの前駆値（Predecessor）を返す。存在しなければ0を返す。
      */
-    function getPredecessor(
+    function getPrevious(
         Tree storage tree,
         uint256 key
     ) internal view returns (uint256) {
@@ -454,7 +454,7 @@ library RedBlackTreeLib {
     /**
      * @notice 指定のkeyの後継値（Successor）を返す。存在しなければ0を返す。
      */
-    function getSuccessor(
+    function getNext(
         Tree storage tree,
         uint256 key
     ) internal view returns (uint256) {

@@ -476,6 +476,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint allowance;
     }
 
+    struct OrderPage {
+        Order[] orders; // 現在のページのオーダー
+        uint256 nextPrice; // 次のページの開始価格（0の場合は最後のページ）
+        uint256 totalCount; // 全オーダー数
+    }
+
     /**
      * @notice Cancels an active order.
      * @param orderId The ID of the order to cancel.
@@ -511,43 +517,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns an array of orders for a given trading pair and side at a specified price level.
-     * @param pairId The trading pair identifier.
-     * @param side Order side (Buy or Sell).
-     * @param count Number of orders to retrieve.
-     * @param startPrice Price level to start (if zero, uses best price).
-     * @return orderResults Array of orders with aggregated amounts.
-     */
-    function getOrders(
-        bytes32 pairId,
-        IMatchingEngine.OrderSide side,
-        uint256 count,
-        uint256 startPrice
-    ) external view returns (OrderResult[] memory orderResults) {
-        OrderBook storage ob = orderBooks[pairId];
-        uint256[] storage orderIds = (side == IMatchingEngine.OrderSide.Buy)
-            ? ob.buyOrdersAtPrice[startPrice]
-            : ob.sellOrdersAtPrice[startPrice];
-        orderResults = new OrderResult[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < orderIds.length && index < count; i++) {
-            Order storage ord = orders[orderIds[i]];
-            if (!ord.active) continue;
-            orderResults[index] = OrderResult({
-                price: ord.price,
-                orderId: ord.id,
-                nextOrderId: ord.next,
-                maker: ord.user,
-                expiry: ord.timestamp, // Placeholder for expiry.
-                tokens: ord.amount,
-                availableBase: ord.amount, // Simplified; adjust if necessary.
-                availableQuote: ord.amount * ord.price
-            });
-            index++;
-        }
-    }
-
-    /**
      * @notice Returns the best (first active) order for a given trading pair and side.
      * @param pairId The trading pair identifier.
      * @param side Order side (Buy or Sell).
@@ -555,12 +524,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
      */
     function getBestOrder(
         bytes32 pairId,
-        IMatchingEngine.OrderSide side
+        OrderSide side
     ) public view returns (BestOrderResult memory orderResult) {
         OrderBook storage ob = orderBooks[pairId];
         uint256 bestPrice;
         uint256[] storage ordersAtPrice;
-        if (side == IMatchingEngine.OrderSide.Buy) {
+        if (side == OrderSide.Buy) {
             bestPrice = ob.buyTree.getMax();
             ordersAtPrice = ob.buyOrdersAtPrice[bestPrice];
         } else {
@@ -595,14 +564,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         require(i < pairKeys.length, "Index out of range");
         bytes32 pairId = pairKeys[i];
         Pair memory p = pairs[pairId];
-        BestOrderResult memory bestBuy = getBestOrder(
-            pairId,
-            IMatchingEngine.OrderSide.Buy
-        );
-        BestOrderResult memory bestSell = getBestOrder(
-            pairId,
-            IMatchingEngine.OrderSide.Sell
-        );
+        BestOrderResult memory bestBuy = getBestOrder(pairId, OrderSide.Buy);
+        BestOrderResult memory bestSell = getBestOrder(pairId, OrderSide.Sell);
         pairResult = PairResult({
             pairId: pairId,
             tokenz: [p.tokenz[0], p.tokenz[1]],
@@ -632,14 +595,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
     function _getPair(bytes32 key) internal view returns (PairResult memory) {
         Pair memory p = pairs[key];
-        BestOrderResult memory bestBuy = getBestOrder(
-            key,
-            IMatchingEngine.OrderSide.Buy
-        );
-        BestOrderResult memory bestSell = getBestOrder(
-            key,
-            IMatchingEngine.OrderSide.Sell
-        );
+        BestOrderResult memory bestBuy = getBestOrder(key, OrderSide.Buy);
+        BestOrderResult memory bestSell = getBestOrder(key, OrderSide.Sell);
         return
             PairResult({
                 pairId: key,
@@ -689,6 +646,83 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 allowance: t.allowance(owners[i], address(this))
             });
         }
+    }
+
+    function getOrdersWithPagination(
+        bytes32 pairId,
+        OrderSide side,
+        uint256 startPrice, // 開始価格（0の場合は最高値/最安値から）
+        uint256 limit
+    ) external view returns (OrderPage memory) {
+        OrderBook storage ob = orderBooks[pairId];
+        RedBlackTreeLib.Tree storage tree = side == OrderSide.Buy
+            ? ob.buyTree
+            : ob.sellTree;
+
+        // 開始価格の設定
+        uint256 price = startPrice == 0
+            ? (side == OrderSide.Buy ? tree.getMax() : tree.getMin())
+            : startPrice;
+
+        // 全オーダー数をカウント
+        uint256 totalCount = 0;
+        uint256 countPrice = side == OrderSide.Buy
+            ? tree.getMax()
+            : tree.getMin();
+        while (countPrice > 0) {
+            uint256[] storage orderIds = side == OrderSide.Buy
+                ? ob.buyOrdersAtPrice[countPrice]
+                : ob.sellOrdersAtPrice[countPrice];
+            for (uint256 i = 0; i < orderIds.length; i++) {
+                if (orders[orderIds[i]].active) {
+                    totalCount++;
+                }
+            }
+            countPrice = side == OrderSide.Buy
+                ? tree.getPrevious(countPrice)
+                : tree.getNext(countPrice);
+        }
+
+        // 現在のページのオーダーを取得
+        Order[] memory pageOrders = new Order[](limit);
+        uint256 count = 0;
+        uint256 nextPrice = 0;
+
+        while (price > 0 && count < limit) {
+            uint256[] storage orderIds = side == OrderSide.Buy
+                ? ob.buyOrdersAtPrice[price]
+                : ob.sellOrdersAtPrice[price];
+
+            for (uint256 i = 0; i < orderIds.length && count < limit; i++) {
+                Order storage order = orders[orderIds[i]];
+                if (order.active) {
+                    pageOrders[count] = order;
+                    count++;
+                }
+            }
+
+            price = side == OrderSide.Buy
+                ? tree.getPrevious(price)
+                : tree.getNext(price);
+
+            if (count >= limit && price > 0) {
+                nextPrice = price; // 次のページの開始価格を設定
+                break;
+            }
+        }
+
+        // 結果配列のサイズを実際のカウントに調整
+        Order[] memory result = new Order[](count);
+        for (uint256 i = 0; i < count; i++) {
+            result[i] = pageOrders[i];
+        }
+
+        return
+            OrderPage({
+                orders: result,
+                nextPrice: nextPrice,
+                totalCount: totalCount
+            });
     }
 
     // ---------------- Admin Functions ----------------

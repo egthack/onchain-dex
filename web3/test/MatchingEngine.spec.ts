@@ -80,10 +80,7 @@ describe("MatchingEngine", function () {
     // --- Trading Pair の追加 ---
     await matchingEngine
       .connect(admin)
-      .addPair(
-        await baseTokenA.getAddress(),
-        await quoteTokenA.getAddress()
-      );
+      .addPair(await baseTokenA.getAddress(), await quoteTokenA.getAddress());
 
     await baseTokenA.connect(admin).transfer(await user.getAddress(), 10000);
     await baseTokenA.connect(user).approve(await vault.getAddress(), 10000);
@@ -107,7 +104,9 @@ describe("MatchingEngine", function () {
     await vault.connect(trader).deposit(await quoteTokenA.getAddress(), 10000);
 
     // trader2 の初期設定を追加
-    await quoteTokenA.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await quoteTokenA
+      .connect(admin)
+      .transfer(await trader2.getAddress(), 10000);
     await quoteTokenA.connect(trader2).approve(await vault.getAddress(), 10000);
     await vault.connect(trader2).deposit(await quoteTokenA.getAddress(), 10000);
   });
@@ -126,17 +125,14 @@ describe("MatchingEngine", function () {
       // 別のペアを追加
       await matchingEngine
         .connect(admin)
-        .addPair(
-          await baseTokenB.getAddress(),
-          await quoteTokenB.getAddress()
-        );
+        .addPair(await baseTokenB.getAddress(), await quoteTokenB.getAddress());
       const pairs = await matchingEngine.getPairsWithPagination(0, 10);
       expect(pairs.length).to.equal(2);
 
       // ペアの内容検証
       expect(pairs[0].tokenz[0]).to.equal(await baseTokenA.getAddress());
       expect(pairs[0].tokenz[1]).to.equal(await quoteTokenA.getAddress());
-      
+
       // 2番目のペアの検証を追加
       expect(pairs[1].tokenz[0]).to.equal(await baseTokenB.getAddress());
       expect(pairs[1].tokenz[1]).to.equal(await quoteTokenB.getAddress());
@@ -144,11 +140,11 @@ describe("MatchingEngine", function () {
   });
 
   describe("Order Creation via Vault", function () {
-    it("should create a buy order properly through vault", async function () {
+    it("should create a single order properly through vault", async function () {
       // --- user によるトークン入金の準備 ---
-      await baseTokenA.connect(admin).transfer(await user.getAddress(), 1000);
-      await baseTokenA.connect(user).approve(await vault.getAddress(), 500);
-      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100);
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
+      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
 
       // --- Trade Request の作成 (Buy order: side = 0) ---
       // この例では amount = 100, price = 1 とする
@@ -178,29 +174,92 @@ describe("MatchingEngine", function () {
       expect(order.active).to.equal(true);
     });
 
-    it("should create a sell order properly through vault", async function () {
-      // --- Trade Request の作成 (Sell order: side = 1) ---
-      // この例では amount = 100, price = 1 とする
-      const tradeRequest = await createTradeRequest({
-        user: user,
-        base: baseTokenA,
-        quote: quoteTokenA,
-        side: 1,
-        amount: 100,
-        price: 1,
-      });
-      // --- Vault 経由で注文実行 ---
-      await vault.connect(user).executeTradeBatch([tradeRequest]);
+    it("should create multiple orders properly through vault", async function () {
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
+      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
+      await quoteTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), 100000);
+      await quoteTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await quoteTokenA.getAddress(), 100000);
 
-      // --- MatchingEngine にオーダーが作成されていることを検証 ---
+      const sellRequests = [];
+      for (let i = 0; i < 5; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1,
+          amount: 100,
+          price: 100 + i,
+        });
+        sellRequests.push(tradeRequest);
+      }
+      await vault.connect(user).executeTradeBatch(sellRequests);
+
+      const buyRequests = [];
+      for (let i = 0; i < 5; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0,
+          amount: 100,
+          price: 99 - i,
+        });
+        buyRequests.push(tradeRequest);
+      }
+      await vault.connect(user).executeTradeBatch(buyRequests);
+
+      // Matchingしないはず
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(0);
+
       const order = await matchingEngine.getOrder(0);
       expect(order.id).to.equal(0);
       expect(order.user).to.equal(await user.getAddress());
       expect(order.base).to.equal(await baseTokenA.getAddress());
       expect(order.quote).to.equal(await quoteTokenA.getAddress());
-      expect(order.price).to.equal(1);
+      expect(order.price).to.equal(100);
       expect(order.amount).to.equal(100);
       expect(order.active).to.equal(true);
+
+      const page = await matchingEngine.getOrdersWithPagination(
+        await matchingEngine.getPairId(
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress()
+        ),
+        0, // Buy side
+        0,
+        10
+      );
+
+      // console.log("Orders:", {
+      //   orders: page.orders.map((o) => ({
+      //     id: o.id.toString(),
+      //     price: o.price.toString(),
+      //     amount: o.amount.toString(),
+      //     active: o.active,
+      //   })),
+      //   nextPrice: page.nextPrice.toString(),
+      //   totalCount: page.totalCount.toString(),
+      // });
+
+      // // 各注文の状態を確認
+      // for (let i = 0; i < 8; i++) {
+      //   const order = await matchingEngine.getOrder(i);
+      //   console.log(`Order ${i}:`, {
+      //     price: order.price.toString(),
+      //     amount: order.amount.toString(),
+      //     active: order.active,
+      //   });
+      // }
+
+      expect(page.orders.length).to.equal(5);
     });
 
     it("should revert when placeOrder is called directly by a non-vault account", async function () {
