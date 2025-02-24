@@ -1,30 +1,17 @@
 version: 1
-applications:
-  - frontend:
-      phases:
-        preBuild:
-          commands:
-            - npm install
-        build:
-          commands:
-            - npm run build
-      artifacts:
-        baseDirectory: .next
-        files:
-          - '**/*'
-      cache:
-        paths:
-          - node_modules/**/*
-          - .next/cache/**/*
-    appRoot: .
-    customHeaders:
-      - pattern: '**/*'
-        headers:
-          - key: 'Strict-Transport-Security'
-            value: 'max-age=31536000; includeSubDomains'
-          - key: 'X-Frame-Options'
-            value: 'SAMEORIGIN'
-          - key: 'X-XSS-Protection'
-            value: '1; mode=block'
-    buildPath: /
-    framework: Next.js - SSR 
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd frontend
+        - npm install         # yarn を利用する場合は "yarn install" に変更
+    build:
+      commands:
+        - npm run build       # package.json に定義された SSR 用の build コマンド
+  artifacts:
+    baseDirectory: .next    # ビルド後のディレクトリ。SSR モードの場合、.next 配下の内容を参照
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
