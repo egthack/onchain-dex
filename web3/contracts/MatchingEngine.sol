@@ -243,6 +243,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 originalAmount = incoming.amount;
 
         if (incoming.side == OrderSide.Buy) {
+            // 買い注文の場合
             uint256 bestSellPrice = ob.sellTree.getMin();
             while (
                 remaining > 0 &&
@@ -292,23 +293,39 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
                         // ■ 想定するトークンフロー(do not remove this comment)
                         // • 入力注文（taker：Buy）の場合：
-                        //    - taker は base トークンを受け取る (fill)
+                        //    - taker は base トークンから手数料を差し引いた分を受け取る (fill - takerFee)
                         //    - taker は quote トークンを差し引き (fill × bestSellPrice) -> lock済みなのでここでは処理しない
                         // • 対する resting 注文（maker：Sell）の場合：
-                        //    - maker は quote トークンを受け取る (fill × bestSellPrice)
+                        //    - maker は quote トークンから手数料を差し引いた分を受け取る (fill × bestSellPrice - makerFee)
                         //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
+                        // 
+                        // --- 手数料計算 ---
+                        // • 入力注文（taker：Buy）の場合：
+                        //    - taker（買い注文の発行者）は base token を受け取るので、手数料は base token から差し引く
+                        //    - maker（売り注文の発行者）は quote token を受け取るので、手数料は quote token から差し引く
+                        uint256 takerFee = (fill * takerFeeRate) / 10000;
+                        uint256 makerGross = fill * bestSellPrice;
+                        uint256 makerFee = (makerGross * makerFeeRate) / 10000;
+                        uint256 takerNet = fill > takerFee ? fill - takerFee : 0;
+                        uint256 makerNet = makerGross > makerFee ? makerGross - makerFee : 0;
 
+                        // Vaultへの反映：実際にユーザーが受け取る金額は手数料控除後
                         _tradingVault.creditBalance(
                             incoming.user,
                             incoming.base,
-                            fill
+                            takerNet
                         );
                         _tradingVault.creditBalance(
                             sellOrder.user,
                             incoming.quote,
-                            fill * bestSellPrice
+                            makerNet
                         );
 
+                        // 手数料の蓄積
+                        takerFeesCollected[incoming.base] += takerFee;
+                        makerFeesCollected[incoming.quote] += makerFee;
+
+                        // TradeExecuted イベントに手数料情報を付与
                         emit TradeExecuted(
                             orderId,
                             sellOrderId,
@@ -316,8 +333,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             incoming.quote,
                             bestSellPrice,
                             fill,
-                            0,
-                            0
+                            makerFee,
+                            takerFee
                         );
                     }
                 }
@@ -327,6 +344,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 bestSellPrice = ob.sellTree.getMin();
             }
         } else {
+            // 売り注文の場合
             uint256 bestBuyPrice = ob.buyTree.getMax();
             while (
                 remaining > 0 &&
@@ -361,21 +379,36 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
                         // ■ 想定するトークンフロー(do not remove this comment)
                         // • 入力注文（taker：Sell）の場合：
-                        //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
+                        //    - taker は quote トークンから手数料を差し引いた分を受け取る (fill × bestBuyPrice - takerFee)
                         //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
                         // • 対する resting 注文（maker：Buy）の場合：
                         //    - maker は quote トークンを差し引き (fill × bestBuyPrice) -> lock済みなのでここでは処理しない
-                        //    - maker は base トークンを受け取る (fill)
+                        //    - maker は base トークンから手数料を差し引いた分を受け取る (fill - makerFee)
+                        // 
+                        // --- 手数料計算 ---
+                        // • 入力注文（taker：Sell）の場合：
+                        //    - taker（売り注文の発行者）は quote token を受け取るので、手数料は quote token から差し引く
+                        //    - maker（買い注文の発行者）は base token を受け取るので、手数料は base token から差し引く
+                        uint256 takerGross = fill * bestBuyPrice;
+                        uint256 takerFee = (takerGross * takerFeeRate) / 10000;
+                        uint256 makerFee = (fill * makerFeeRate) / 10000;
+                        uint256 takerNet = takerGross > takerFee ? takerGross - takerFee : 0;
+                        uint256 makerNet = fill > makerFee ? fill - makerFee : 0;
+
+                        // Vaultへの反映：実際にユーザーが受け取る金額は手数料控除後    
                         _tradingVault.creditBalance(
                             incoming.user,
                             incoming.quote,
-                            fill * bestBuyPrice
+                            takerNet
                         );
                         _tradingVault.creditBalance(
                             buyOrder.user,
                             incoming.base,
-                            fill
+                            makerNet
                         );
+
+                        takerFeesCollected[incoming.quote] += takerFee;
+                        makerFeesCollected[incoming.base] += makerFee;
 
                         emit TradeExecuted(
                             buyOrderId,
@@ -384,8 +417,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                             incoming.quote,
                             bestBuyPrice,
                             fill,
-                            0,
-                            0
+                            makerFee,
+                            takerFee
                         );
                     }
                 }
@@ -396,11 +429,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             }
         }
 
-        // 状態変更を先に行う
+        // 状態変更を先に行う（注文の残量更新)
         incoming.amount = remaining;
         incoming.active = (remaining > 0);
 
-        // 成行注文の処理のための状態も先に計算
+        // 成行注文の処理のための状態も先に計算(成行注文の場合、未執行分の返金処理)
         uint256 refundAmount = 0;
         address refundToken = address(0);
         if (incoming.price == 0 && remaining > 0) {
@@ -416,13 +449,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             incoming.active = false;
         }
 
-        // refundTokenが設定されていることを確認
         require(
             refundAmount == 0 || refundToken != address(0),
             "Invalid refund token"
         );
 
-        // 成行注文の返金処理は最後に実行
         if (refundAmount > 0) {
             _tradingVault.creditBalance(
                 incoming.user,
