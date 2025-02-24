@@ -266,192 +266,240 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 originalAmount = incoming.amount;
 
         if (incoming.side == OrderSide.Buy) {
-            uint256 bestSellPrice = ob.sellTree.getMin();
-            while (
-                remaining > 0 &&
-                bestSellPrice > 0 &&
-                (incoming.price == 0 || bestSellPrice <= incoming.price) &&
-                iterations < MAX_MATCH_ITERATIONS
-            ) {
-                iterations++;
-                uint256[] storage sellList = ob.sellOrdersAtPrice[
-                    bestSellPrice
-                ];
-                for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
-                    uint256 sellOrderId = sellList[i];
-                    Order storage sellOrder = orders[sellOrderId];
-                    if (!sellOrder.active) {
-                        sellList[i] = sellList[sellList.length - 1];
-                        sellList.pop();
-                        continue;
-                    }
-                    uint256 fill;
-                    if (incoming.price == 0) {
-                        // 成行買い注文
-                        // remainingはquote token量なので、base token量に変換
-                        uint256 maxBaseFill = remaining / bestSellPrice; // quote -> base
-                        fill = maxBaseFill < sellOrder.amount
-                            ? maxBaseFill
-                            : sellOrder.amount;
-                    } else {
-                        fill = remaining < sellOrder.amount
-                            ? remaining
-                            : sellOrder.amount;
-                    }
-
-                    if (fill > 0) {
-                        // 状態変更を先に行う
-                        sellOrder.amount -= fill;
-                        sellOrder.active = (sellOrder.amount > 0);
-                        remaining -= (incoming.price == 0)
-                            ? fill * bestSellPrice // quote token amount
-                            : fill; // base token amount
-                        if (sellOrder.amount == 0) {
-                            sellList[i] = sellList[sellList.length - 1];
-                            sellList.pop();
-                        } else {
-                            i++;
-                        }
-
-                        // ■ 想定するトークンフロー(do not remove this comment)
-                        // • 入力注文（taker：Buy）の場合：
-                        //    - taker は base トークンを受け取る (fill)
-                        //    - taker は quote トークンを差し引き (fill × bestSellPrice) -> lock済みなのでここでは処理しない
-                        // • 対する resting 注文（maker：Sell）の場合：
-                        //    - maker は quote トークンを受け取る (fill × bestSellPrice)
-                        //    - maker は base トークンを差し引き (fill) -> lock済みなのでここでは処理しない
-
-                        _tradingVault.creditBalance(
-                            incoming.user,
-                            incoming.base,
-                            fill
-                        );
-                        _tradingVault.creditBalance(
-                            sellOrder.user,
-                            incoming.quote,
-                            fill * bestSellPrice
-                        );
-
-                        emit TradeExecuted(
-                            orderId,
-                            sellOrderId,
-                            incoming.base,
-                            incoming.quote,
-                            bestSellPrice,
-                            fill,
-                            0,
-                            0
-                        );
-                    }
-                }
-                if (sellList.length == 0) {
-                    ob.sellTree.remove(bestSellPrice);
-                }
-                bestSellPrice = ob.sellTree.getMin();
-            }
+            _matchBuyOrder(orderId, ob, remaining, iterations, originalAmount);
         } else {
-            uint256 bestBuyPrice = ob.buyTree.getMax();
-            while (
-                remaining > 0 &&
-                bestBuyPrice > 0 &&
-                (incoming.price == 0 || bestBuyPrice >= incoming.price) &&
-                iterations < MAX_MATCH_ITERATIONS
-            ) {
-                iterations++;
-                uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
-                for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
-                    uint256 buyOrderId = buyList[i];
-                    Order storage buyOrder = orders[buyOrderId];
-                    if (!buyOrder.active) {
-                        buyList[i] = buyList[buyList.length - 1];
-                        buyList.pop();
-                        continue;
-                    }
-                    uint256 fill = remaining < buyOrder.amount
-                        ? remaining
-                        : buyOrder.amount;
+            _matchSellOrder(orderId, ob, remaining, iterations, originalAmount);
+        }
+    }
 
-                    if (fill > 0) {
-                        buyOrder.amount -= fill;
-                        buyOrder.active = (buyOrder.amount > 0);
-                        remaining -= fill;
-                        if (buyOrder.amount == 0) {
-                            buyList[i] = buyList[buyList.length - 1];
-                            buyList.pop();
-                        } else {
-                            i++;
-                        }
-
-                        // ■ 想定するトークンフロー(do not remove this comment)
-                        // • 入力注文（taker：Sell）の場合：
-                        //    - taker は quote トークンを受け取る (fill × bestBuyPrice)
-                        //    - taker は base トークンを差し引き (fill)-> lock済みなのでここでは処理しない
-                        // • 対する resting 注文（maker：Buy）の場合：
-                        //    - maker は quote トークンを差し引き (fill × bestBuyPrice) -> lock済みなのでここでは処理しない
-                        //    - maker は base トークンを受け取る (fill)
-                        _tradingVault.creditBalance(
-                            incoming.user,
-                            incoming.quote,
-                            fill * bestBuyPrice
-                        );
-                        _tradingVault.creditBalance(
-                            buyOrder.user,
-                            incoming.base,
-                            fill
-                        );
-
-                        emit TradeExecuted(
-                            buyOrderId,
-                            orderId,
-                            incoming.base,
-                            incoming.quote,
-                            bestBuyPrice,
-                            fill,
-                            0,
-                            0
-                        );
-                    }
-                }
-                if (buyList.length == 0) {
-                    ob.buyTree.remove(bestBuyPrice);
-                }
-                bestBuyPrice = ob.buyTree.getMax();
+    function _matchBuyOrder(
+        uint256 orderId,
+        OrderBook storage ob,
+        uint256 remaining,
+        uint256 iterations,
+        uint256 originalAmount
+    ) internal {
+        Order storage incoming = orders[orderId];
+        uint256 bestSellPrice = ob.sellTree.getMin();
+        
+        while (
+            remaining > 0 &&
+            bestSellPrice > 0 &&
+            (incoming.price == 0 || bestSellPrice <= incoming.price) &&
+            iterations < MAX_MATCH_ITERATIONS
+        ) {
+            iterations++;
+            uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
+            
+            for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
+                (remaining, i) = _processBuyMatch(
+                    orderId,
+                    remaining,
+                    bestSellPrice,
+                    sellList,
+                    i
+                );
             }
+            
+            if (sellList.length == 0) {
+                ob.sellTree.remove(bestSellPrice);
+            }
+            bestSellPrice = ob.sellTree.getMin();
         }
 
-        // 状態変更を先に行う
-        incoming.amount = remaining;
-        incoming.active = (remaining > 0);
+        _finalizeOrder(incoming, remaining, originalAmount);
+    }
 
-        // 成行注文の処理のための状態も先に計算
-        uint256 refundAmount = 0;
-        address refundToken = address(0);
-        if (incoming.price == 0 && remaining > 0) {
-            if (incoming.side == OrderSide.Buy) {
-                uint256 lockedAmount = _tradingVault.getLockedAmount(orderId);
+    function _processBuyMatch(
+        uint256 orderId,
+        uint256 remaining,
+        uint256 bestSellPrice,
+        uint256[] storage sellList,
+        uint256 i
+    ) internal returns (uint256, uint256) {
+        uint256 sellOrderId = sellList[i];
+        Order storage sellOrder = orders[sellOrderId];
+        Order storage incoming = orders[orderId];
+        
+        if (!sellOrder.active) {
+            sellList[i] = sellList[sellList.length - 1];
+            sellList.pop();
+            return (remaining, i);
+        }
+
+        uint256 fill;
+        if (incoming.price == 0) {
+            uint256 maxBaseFill = remaining / bestSellPrice;
+            fill = maxBaseFill < sellOrder.amount ? maxBaseFill : sellOrder.amount;
+        } else {
+            fill = remaining < sellOrder.amount ? remaining : sellOrder.amount;
+        }
+
+        if (fill > 0) {
+            sellOrder.amount -= fill;
+            sellOrder.active = (sellOrder.amount > 0);
+            remaining -= (incoming.price == 0) ? fill * bestSellPrice : fill;
+
+            if (sellOrder.amount == 0) {
+                sellList[i] = sellList[sellList.length - 1];
+                sellList.pop();
+            } else {
+                i++;
+            }
+
+            uint256 takerFee = (fill * takerFeeRate) / 10000;
+            uint256 makerGross = fill * bestSellPrice;
+            uint256 makerFee = (makerGross * makerFeeRate) / 10000;
+            uint256 takerNet = fill > takerFee ? fill - takerFee : 0;
+            uint256 makerNet = makerGross > makerFee ? makerGross - makerFee : 0;
+
+            _tradingVault.creditBalance(incoming.user, incoming.base, takerNet);
+            _tradingVault.creditBalance(sellOrder.user, incoming.quote, makerNet);
+
+            takerFeesCollected[incoming.base] += takerFee;
+            makerFeesCollected[incoming.quote] += makerFee;
+
+            emit TradeExecuted(
+                orderId,
+                sellOrderId,
+                incoming.base,
+                incoming.quote,
+                bestSellPrice,
+                fill,
+                makerFee,
+                takerFee
+            );
+        }
+
+        return (remaining, i);
+    }
+
+    function _matchSellOrder(
+        uint256 orderId,
+        OrderBook storage ob,
+        uint256 remaining,
+        uint256 iterations,
+        uint256 originalAmount
+    ) internal {
+        Order storage incoming = orders[orderId];
+        uint256 bestBuyPrice = ob.buyTree.getMax();
+
+        while (
+            remaining > 0 &&
+            bestBuyPrice > 0 &&
+            (incoming.price == 0 || bestBuyPrice >= incoming.price) &&
+            iterations < MAX_MATCH_ITERATIONS
+        ) {
+            iterations++;
+            uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
+            
+            for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
+                (remaining, i) = _processSellMatch(
+                    orderId,
+                    remaining,
+                    bestBuyPrice,
+                    buyList,
+                    i
+                );
+            }
+            
+            if (buyList.length == 0) {
+                ob.buyTree.remove(bestBuyPrice);
+            }
+            bestBuyPrice = ob.buyTree.getMax();
+        }
+
+        _finalizeOrder(incoming, remaining, originalAmount);
+    }
+
+    function _processSellMatch(
+        uint256 orderId,
+        uint256 remaining,
+        uint256 bestBuyPrice,
+        uint256[] storage buyList,
+        uint256 i
+    ) internal returns (uint256, uint256) {
+        uint256 buyOrderId = buyList[i];
+        Order storage buyOrder = orders[buyOrderId];
+        Order storage incoming = orders[orderId];
+        
+        if (!buyOrder.active) {
+            buyList[i] = buyList[buyList.length - 1];
+            buyList.pop();
+            return (remaining, i);
+        }
+
+        uint256 fill = remaining < buyOrder.amount ? remaining : buyOrder.amount;
+
+        if (fill > 0) {
+            buyOrder.amount -= fill;
+            buyOrder.active = (buyOrder.amount > 0);
+            remaining -= fill;
+
+            if (buyOrder.amount == 0) {
+                buyList[i] = buyList[buyList.length - 1];
+                buyList.pop();
+            } else {
+                i++;
+            }
+
+            uint256 takerGross = fill * bestBuyPrice;
+            uint256 takerFee = (takerGross * takerFeeRate) / 10000;
+            uint256 makerFee = (fill * makerFeeRate) / 10000;
+            uint256 takerNet = takerGross > takerFee ? takerGross - takerFee : 0;
+            uint256 makerNet = fill > makerFee ? fill - makerFee : 0;
+
+            _tradingVault.creditBalance(incoming.user, incoming.quote, takerNet);
+            _tradingVault.creditBalance(buyOrder.user, incoming.base, makerNet);
+
+            takerFeesCollected[incoming.quote] += takerFee;
+            makerFeesCollected[incoming.base] += makerFee;
+
+            emit TradeExecuted(
+                buyOrderId,
+                orderId,
+                incoming.base,
+                incoming.quote,
+                bestBuyPrice,
+                fill,
+                makerFee,
+                takerFee
+            );
+        }
+
+        return (remaining, i);
+    }
+
+    function _finalizeOrder(
+        Order storage order,
+        uint256 remaining,
+        uint256 originalAmount
+    ) internal {
+        order.amount = remaining;
+        order.active = (remaining > 0);
+
+        if (order.price == 0 && remaining > 0) {
+            uint256 refundAmount = 0;
+            address refundToken = address(0);
+
+            if (order.side == OrderSide.Buy) {
+                uint256 lockedAmount = _tradingVault.getLockedAmount(order.id);
                 refundAmount = (lockedAmount * remaining) / originalAmount;
-                refundToken = incoming.quote;
+                refundToken = order.quote;
             } else {
                 refundAmount = remaining;
-                refundToken = incoming.base;
+                refundToken = order.base;
             }
-        } else if (remaining == 0) {
-            incoming.active = false;
-        }
 
-        // refundTokenが設定されていることを確認
+            // refundTokenが設定されていることを確認
         require(
-            refundAmount == 0 || refundToken != address(0),
-            "Invalid refund token"
-        );
-
-        // 成行注文の返金処理は最後に実行
-        if (refundAmount > 0) {
-            _tradingVault.creditBalance(
-                incoming.user,
-                refundToken,
-                refundAmount
+                refundAmount == 0 || refundToken != address(0),
+                "Invalid refund token"
             );
+
+            if (refundAmount > 0) {
+                _tradingVault.creditBalance(order.user, refundToken, refundAmount);
+            }
         }
     }
 
