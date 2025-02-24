@@ -4,11 +4,16 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    // SSRとエッジランタイムの設定
+    serverActions: true,
+    serverComponents: true,
+  },
   async rewrites() {
     return [
       {
         source: "/:path*",
-        destination: "/_next/static/:path*",
+        destination: "/:path*",
       },
       {
         source: "/api/:path*",
