@@ -4,14 +4,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  basePath: "/frontend",
   async rewrites() {
     return [
       {
-        source: "/:path*",
-        destination: "/_next/static/:path*",
+        source: "/frontend/:path*",
+        destination: "/:path*",
       },
       {
-        source: "/api/:path*",
+        source: "/frontend/api/:path*",
         destination: "/api/:path*",
       },
     ];
