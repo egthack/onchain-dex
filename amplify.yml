@@ -1,0 +1,31 @@
+version: 1
+applications:
+  - frontend:
+      phases:
+        preBuild:
+          commands:
+            - cd frontend
+            - npm install
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: frontend/.next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - frontend/node_modules/**/*
+          - frontend/.next/cache/**/*
+    appRoot: frontend
+    customHeaders:
+      - pattern: '**/*'
+        headers:
+          - key: 'Strict-Transport-Security'
+            value: 'max-age=31536000; includeSubDomains'
+          - key: 'X-Frame-Options'
+            value: 'SAMEORIGIN'
+          - key: 'X-XSS-Protection'
+            value: '1; mode=block'
+    buildPath: /
+    framework: Next.js - SSR 
