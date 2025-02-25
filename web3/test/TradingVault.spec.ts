@@ -20,6 +20,7 @@ describe("TradingVault", function () {
   let trader: Signer;
   let baseToken: MockERC20;
   let quoteToken: MockERC20;
+  let lowDecimalToken: MockERC20; // 6桁未満のトークン
   let vault: TradingVault;
   let engine: MatchingEngine;
 
@@ -46,9 +47,21 @@ describe("TradingVault", function () {
     );
     await quoteToken.waitForDeployment();
 
+    // 6桁未満のトークンをデプロイ
+    lowDecimalToken = await TokenFactory.connect(owner).deploy(
+      "Low Decimal Token",
+      "LOW",
+      1000000,
+      5
+    );
+    await lowDecimalToken.waitForDeployment();
+
     // Transfer some tokens to user for deposit tests
     await baseToken.connect(owner).transfer(await user.getAddress(), 1000);
     await quoteToken.connect(owner).transfer(await user.getAddress(), 1000);
+    await lowDecimalToken
+      .connect(owner)
+      .transfer(await user.getAddress(), 1000);
 
     // Deploy MatchingEngine with fee rates (makerFeeRate = 10, takerFeeRate = 15)
     const EngineFactory = await ethers.getContractFactory("MatchingEngine");
@@ -68,7 +81,16 @@ describe("TradingVault", function () {
 
     await engine.connect(owner).setVaultAddress(await vault.getAddress());
 
-    return { owner, user, trader, baseToken, quoteToken, vault, engine };
+    return {
+      owner,
+      user,
+      trader,
+      baseToken,
+      quoteToken,
+      lowDecimalToken,
+      vault,
+      engine,
+    };
   };
 
   beforeEach(async function () {
@@ -91,6 +113,19 @@ describe("TradingVault", function () {
       await expect(
         vault.connect(user).deposit(baseToken.getAddress(), 0)
       ).to.be.revertedWith("Amount must be > 0");
+    });
+
+    it("should revert deposit if token has less than 6 decimals", async function () {
+      await lowDecimalToken
+        .connect(user)
+        .approve(await vault.getAddress(), 200);
+
+      // カスタムエラーの検証方法
+      await expect(
+        vault.connect(user).deposit(lowDecimalToken.getAddress(), 100)
+      )
+        .to.be.revertedWithCustomError(vault, "InsufficientDecimals")
+        .withArgs(await lowDecimalToken.getAddress(), 5);
     });
   });
 
@@ -126,6 +161,61 @@ describe("TradingVault", function () {
         baseToken.getAddress()
       );
       expect(after).to.equal(before);
+    });
+  });
+
+  describe("Execute Trade", function () {
+    it("should revert if base token has less than 6 decimals", async function () {
+      // ユーザーがquoteトークンをデポジット
+      await quoteToken.connect(user).approve(await vault.getAddress(), 1000);
+      await vault.connect(user).deposit(quoteToken.getAddress(), 1000);
+
+      // 低小数点トークンとquoteトークンのペアを追加
+      await engine
+        .connect(owner)
+        .addPair(lowDecimalToken.getAddress(), quoteToken.getAddress());
+
+      // 取引リクエスト作成：Buy注文
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: lowDecimalToken,
+        quote: quoteToken,
+        side: 0, // Buy
+        amount: 100,
+        price: 1,
+      });
+
+      // 実行時にエラーが発生することを確認
+      await expect(vault.connect(user).executeTradeBatch([tradeRequest]))
+        .to.be.revertedWithCustomError(vault, "InsufficientDecimals")
+        .withArgs(await lowDecimalToken.getAddress(), 5);
+    });
+
+    it("should revert if quote token has less than 6 decimals", async function () {
+      // ユーザーが低小数点トークンをデポジット
+      await lowDecimalToken
+        .connect(user)
+        .approve(await vault.getAddress(), 1000);
+
+      // baseトークンと低小数点トークンのペアを追加
+      await engine
+        .connect(owner)
+        .addPair(baseToken.getAddress(), lowDecimalToken.getAddress());
+
+      // 取引リクエスト作成：Buy注文
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseToken,
+        quote: lowDecimalToken,
+        side: 0, // Buy
+        amount: 100,
+        price: 1,
+      });
+
+      // 実行時にエラーが発生することを確認
+      await expect(vault.connect(user).executeTradeBatch([tradeRequest]))
+        .to.be.revertedWithCustomError(vault, "InsufficientDecimals")
+        .withArgs(await lowDecimalToken.getAddress(), 5);
     });
   });
 

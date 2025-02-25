@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./interfaces/ITradingVault.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
@@ -15,6 +16,9 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  *      It allows executing batched trades via an external MatchingEngine.
  */
 contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
+    /// @notice 必要最小限の小数点以下桁数
+    uint8 private constant MINIMUM_DECIMALS = 6;
+
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
@@ -34,6 +38,14 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         _;
     }
 
+    /// @notice トークンの小数点以下桁数を検証
+    function _validateTokenDecimals(address token) internal view {
+        uint8 decimals = IERC20Metadata(token).decimals();
+        if (decimals < MINIMUM_DECIMALS) {
+            revert InsufficientDecimals(token, decimals);
+        }
+    }
+
     /**
      * @notice Deposits tokens into the Vault.
      */
@@ -42,6 +54,9 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         uint256 amount
     ) external override nonReentrant {
         require(amount > 0, "Amount must be > 0");
+
+        // トークンの小数点以下桁数を検証
+        _validateTokenDecimals(token);
 
         bool success = IERC20(token).transferFrom(
             msg.sender,
@@ -124,6 +139,10 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
      */
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         VaultLib.checkTradeRequest(req);
+
+        // トークンの小数点以下桁数を検証
+        _validateTokenDecimals(req.base);
+        _validateTokenDecimals(req.quote);
 
         // 1. トークンのロックと注文の作成
         uint256 lockedAmount = _lockTokens(req);
