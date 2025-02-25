@@ -680,9 +680,9 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     /**
      * @notice Returns token information for a list of tokens.
      * @param tokens Array of Base Tokenddresses.
-     * @return results Array of basefoResult structures.
+     * @return results Array of BaseInfoResult structures.
      */
-    function getbasefo(
+    function getBaseInfo(
         address[] calldata tokens
     ) external view returns (BaseInfoResult[] memory results) {
         results = new BaseInfoResult[](tokens.length);
@@ -698,12 +698,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Returns Quote Tokenalance and allowance for a list of owners and tokens.
+     * @notice Returns Quote Token balance and allowance for a list of owners and tokens.
      * @param owners Array of owner addresses.
-     * @param tokens Array of Base Tokenddresses (must be same length as owners).
-     * @return results Array of quotebaseTokenlanceAndAllowanceResult structures.
+     * @param tokens Array of Base Token addresses (must be same length as owners).
+     * @return results Array of TokenBalanceAndAllowanceResult structures.
      */
-    function getquotebaseTokenlanceAndAllowance(
+    function getTokenBalanceAndAllowance(
         address[] calldata owners,
         address[] calldata tokens
     ) external view returns (TokenBalanceAndAllowanceResult[] memory results) {
