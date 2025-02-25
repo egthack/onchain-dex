@@ -3,7 +3,6 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IERC20.sol";
-import "hardhat/console.sol";
 
 contract Faucet is Ownable {
     // トークンアドレスごとの最後のドリップ時刻を記録
@@ -51,11 +50,6 @@ contract Faucet is Ownable {
     function addToken(address token, uint256 amount) external onlyOwner {
         require(token != address(0), "Invalid token address");
         require(amount > 0, "Amount must be greater than 0");
-        console.log(
-            "allowance",
-            IERC20(token).allowance(msg.sender, address(this))
-        );
-        console.log("balance", IERC20(token).balanceOf(msg.sender));
         require(
             IERC20(token).allowance(msg.sender, address(this)) >= amount,
             "Insufficient allowance"

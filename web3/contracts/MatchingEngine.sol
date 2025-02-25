@@ -19,6 +19,13 @@ import "./interfaces/ITradingVault.sol";
 contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     using RedBlackTreeLib for RedBlackTreeLib.Tree;
 
+    /// @notice 数量の精度調整用の係数（小数点以下6桁精度）
+    uint256 private constant AMOUNT_PRECISION_FACTOR = 1000000;
+    /// @notice 価格の精度調整用の係数（小数点以下2桁精度）
+    uint256 private constant PRICE_PRECISION_FACTOR = 100;
+    /// @notice 最小取引量（1 = 0.000001 * 10^6）
+    uint256 private constant MINIMUM_AMOUNT = 1;
+
     // OrderBook structure for a specific trading pair.
     struct OrderBook {
         RedBlackTreeLib.Tree buyTree; // Buy orders (max price first).
@@ -210,13 +217,16 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid pair"
         );
 
+        // 価格を小数点以下2桁の精度に切り捨て
+        uint256 truncatedPrice = price > 0 ? _truncatePrice(price) : 0;
+
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
             id: orderId,
             user: user,
             base: base,
             quote: quote,
-            price: price,
+            price: truncatedPrice,
             amount: amount,
             side: side,
             timestamp: block.timestamp,
@@ -226,17 +236,25 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
-            ob.buyOrdersAtPrice[price].push(orderId);
-            if (!ob.buyTree.exists(price)) {
-                ob.buyTree.insert(price);
+            ob.buyOrdersAtPrice[truncatedPrice].push(orderId);
+            if (!ob.buyTree.exists(truncatedPrice)) {
+                ob.buyTree.insert(truncatedPrice);
             }
         } else {
-            ob.sellOrdersAtPrice[price].push(orderId);
-            if (!ob.sellTree.exists(price)) {
-                ob.sellTree.insert(price);
+            ob.sellOrdersAtPrice[truncatedPrice].push(orderId);
+            if (!ob.sellTree.exists(truncatedPrice)) {
+                ob.sellTree.insert(truncatedPrice);
             }
         }
-        emit OrderPlaced(orderId, user, side, base, quote, price, amount);
+        emit OrderPlaced(
+            orderId,
+            user,
+            side,
+            base,
+            quote,
+            truncatedPrice,
+            amount
+        );
         return orderId;
     }
 
@@ -281,7 +299,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     ) internal {
         Order storage incoming = orders[orderId];
         uint256 bestSellPrice = ob.sellTree.getMin();
-        
+
         while (
             remaining > 0 &&
             bestSellPrice > 0 &&
@@ -290,7 +308,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         ) {
             iterations++;
             uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
-            
+
             for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
                 (remaining, i) = _processBuyMatch(
                     orderId,
@@ -300,7 +318,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                     i
                 );
             }
-            
+
             if (sellList.length == 0) {
                 ob.sellTree.remove(bestSellPrice);
             }
@@ -320,7 +338,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 sellOrderId = sellList[i];
         Order storage sellOrder = orders[sellOrderId];
         Order storage incoming = orders[orderId];
-        
+
         if (!sellOrder.active) {
             sellList[i] = sellList[sellList.length - 1];
             sellList.pop();
@@ -330,7 +348,9 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 fill;
         if (incoming.price == 0) {
             uint256 maxBaseFill = remaining / bestSellPrice;
-            fill = maxBaseFill < sellOrder.amount ? maxBaseFill : sellOrder.amount;
+            fill = maxBaseFill < sellOrder.amount
+                ? maxBaseFill
+                : sellOrder.amount;
         } else {
             fill = remaining < sellOrder.amount ? remaining : sellOrder.amount;
         }
@@ -347,15 +367,34 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 i++;
             }
 
+            // 手数料計算（精度を保持したまま）
             uint256 takerFee = (fill * takerFeeRate) / 10000;
             uint256 makerGross = fill * bestSellPrice;
             uint256 makerFee = (makerGross * makerFeeRate) / 10000;
+
+            // 正味金額の計算（精度を保持したまま）
             uint256 takerNet = fill > takerFee ? fill - takerFee : 0;
-            uint256 makerNet = makerGross > makerFee ? makerGross - makerFee : 0;
+            uint256 makerNet = makerGross > makerFee
+                ? makerGross - makerFee
+                : 0;
 
-            _tradingVault.creditBalance(incoming.user, incoming.base, takerNet);
-            _tradingVault.creditBalance(sellOrder.user, incoming.quote, makerNet);
+            // 最終的な金額を6桁精度に切り捨て
+            uint256 truncatedTakerNet = _truncateToMinimumDecimals(takerNet);
+            uint256 truncatedMakerNet = _truncateToMinimumDecimals(makerNet);
 
+            // 残高更新（切り捨て後の金額を使用）
+            _tradingVault.creditBalance(
+                incoming.user,
+                incoming.base,
+                truncatedTakerNet
+            );
+            _tradingVault.creditBalance(
+                sellOrder.user,
+                incoming.quote,
+                truncatedMakerNet
+            );
+
+            // 手数料の収集（切り捨てなし）
             takerFeesCollected[incoming.base] += takerFee;
             makerFeesCollected[incoming.quote] += makerFee;
 
@@ -392,7 +431,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         ) {
             iterations++;
             uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
-            
+
             for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
                 (remaining, i) = _processSellMatch(
                     orderId,
@@ -402,7 +441,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                     i
                 );
             }
-            
+
             if (buyList.length == 0) {
                 ob.buyTree.remove(bestBuyPrice);
             }
@@ -422,14 +461,16 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 buyOrderId = buyList[i];
         Order storage buyOrder = orders[buyOrderId];
         Order storage incoming = orders[orderId];
-        
+
         if (!buyOrder.active) {
             buyList[i] = buyList[buyList.length - 1];
             buyList.pop();
             return (remaining, i);
         }
 
-        uint256 fill = remaining < buyOrder.amount ? remaining : buyOrder.amount;
+        uint256 fill = remaining < buyOrder.amount
+            ? remaining
+            : buyOrder.amount;
 
         if (fill > 0) {
             buyOrder.amount -= fill;
@@ -443,15 +484,34 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 i++;
             }
 
+            // 手数料計算（精度を保持したまま）
             uint256 takerGross = fill * bestBuyPrice;
             uint256 takerFee = (takerGross * takerFeeRate) / 10000;
             uint256 makerFee = (fill * makerFeeRate) / 10000;
-            uint256 takerNet = takerGross > takerFee ? takerGross - takerFee : 0;
+
+            // 正味金額の計算（精度を保持したまま）
+            uint256 takerNet = takerGross > takerFee
+                ? takerGross - takerFee
+                : 0;
             uint256 makerNet = fill > makerFee ? fill - makerFee : 0;
 
-            _tradingVault.creditBalance(incoming.user, incoming.quote, takerNet);
-            _tradingVault.creditBalance(buyOrder.user, incoming.base, makerNet);
+            // 最終的な金額を6桁精度に切り捨て
+            uint256 truncatedTakerNet = _truncateToMinimumDecimals(takerNet);
+            uint256 truncatedMakerNet = _truncateToMinimumDecimals(makerNet);
 
+            // 残高更新（切り捨て後の金額を使用）
+            _tradingVault.creditBalance(
+                incoming.user,
+                incoming.quote,
+                truncatedTakerNet
+            );
+            _tradingVault.creditBalance(
+                buyOrder.user,
+                incoming.base,
+                truncatedMakerNet
+            );
+
+            // 手数料の収集（切り捨てなし）
             takerFeesCollected[incoming.quote] += takerFee;
             makerFeesCollected[incoming.base] += makerFee;
 
@@ -491,13 +551,21 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 refundToken = order.base;
             }
 
-        require(
+            require(
                 refundAmount == 0 || refundToken != address(0),
                 "Invalid refund token"
             );
 
             if (refundAmount > 0) {
-                _tradingVault.creditBalance(order.user, refundToken, refundAmount);
+                // 返金額も6桁精度に切り捨て
+                uint256 truncatedRefund = _truncateToMinimumDecimals(
+                    refundAmount
+                );
+                _tradingVault.creditBalance(
+                    order.user,
+                    refundToken,
+                    truncatedRefund
+                );
             }
         }
     }
@@ -777,5 +845,24 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         require(success, "Fee transfer failed");
 
         emit FeesWithdrawn(token, makerAmount, takerAmount);
+    }
+
+    /// @notice 金額を小数点以下6桁の精度に切り捨て
+    /// @dev 切り捨て前の値が0より大きく、切り捨て後が0になる場合は最小値を返す
+    function _truncateToMinimumDecimals(
+        uint256 amount
+    ) internal pure returns (uint256) {
+        uint256 truncated = (amount / AMOUNT_PRECISION_FACTOR) *
+            AMOUNT_PRECISION_FACTOR;
+        // 切り捨てによってゼロになるが、元の値が0より大きい場合は最小値を設定
+        if (truncated == 0 && amount > 0) {
+            return MINIMUM_AMOUNT;
+        }
+        return truncated;
+    }
+
+    /// @notice 価格を小数点以下2桁の精度に切り捨て
+    function _truncatePrice(uint256 price) internal pure returns (uint256) {
+        return (price / PRICE_PRECISION_FACTOR) * PRICE_PRECISION_FACTOR;
     }
 }
