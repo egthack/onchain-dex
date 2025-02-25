@@ -32,27 +32,29 @@ dataSources:
         - event: OrderCancelled(indexed uint256,indexed address)
           handler: handleOrderCancelled
       file: ./src/tradingvault.ts
-  # - kind: ethereum/contract
-  #   name: MatchingEngine
-  #   network: riseSepolia
-  #   source:
-  #     address: '0xeAd3a036033F00d2B5c3B96E10783A6eb11B2c28'
-  #     abi: MatchingEngine
-  #     startBlock: 5136615
-  #   mapping:
-  #     kind: ethereum/events
-  #     apiVersion: 0.0.6
-  #     language: wasm/assemblyscript
-  #     entities:
-  #       - User
-  #       - Token
-  #       - Order
-  #     abis:
-  #       - name: MatchingEngine
-  #         file: ./abis/MatchingEngine.json
-  #     eventHandlers:
-  #       - event: OrderPlaced(indexed uint256,indexed address,uint8,address,address,uint256,uint256)
-  #         handler: handleOrderPlaced
-  #       - event: TradeExecuted(indexed uint256,indexed uint256,uint256,uint256,uint256,uint256)
-  #         handler: handleTradeExecuted
-  #     file: ./src/matchingengine.ts
+  - kind: ethereum/contract
+    name: MatchingEngine
+    network: rise-sepolia
+    source:
+      address: '0xeAd3a036033F00d2B5c3B96E10783A6eb11B2c28'
+      abi: MatchingEngine
+      startBlock: 5136615
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.6
+      language: wasm/assemblyscript
+      entities:
+        - User
+        - Token
+        - Order
+      abis:
+        - name: MatchingEngine
+          file: ./abis/MatchingEngine.json
+      eventHandlers:
+        - event: OrderPlaced(indexed uint256,indexed address,uint8,address,address,uint256,uint256)
+          handler: handleOrderPlaced
+        - event: TradeExecuted(indexed uint256,indexed uint256,address,address,uint256,uint256,uint256,uint256)
+          handler: handleTradeExecuted
+        - event: PairAdded(indexed bytes32,address,address,uint256[2],uint256)
+          handler: handlePairAdded
+      file: ./src/matchingengine.ts
