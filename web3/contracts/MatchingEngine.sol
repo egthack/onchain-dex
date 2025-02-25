@@ -502,56 +502,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         }
     }
 
-    // ---------------- Snapshot Functions for Front-End ----------------
-
-    struct OrderResult {
-        uint256 price;
-        uint256 orderId;
-        uint256 nextOrderId;
-        address maker;
-        uint256 expiry;
-        uint256 tokens;
-        uint256 availableBase;
-        uint256 availableQuote;
-    }
-
-    struct BestOrderResult {
-        uint256 price;
-        uint256 orderId;
-        uint256 nextOrderId;
-        address maker;
-        uint256 expiry;
-        uint256 tokens;
-        uint256 availableBase;
-        uint256 availableQuote;
-    }
-
-    struct PairResult {
-        bytes32 pairId;
-        address[2] tokenz;
-        uint256[2] decimals;
-        BestOrderResult bestBuyOrder;
-        BestOrderResult bestSellOrder;
-    }
-
-    struct BaseInfoResult {
-        string symbol;
-        string name;
-        uint8 decimals;
-        uint totalSupply;
-    }
-
-    struct TokenBalanceAndAllowanceResult {
-        uint balance;
-        uint allowance;
-    }
-
-    struct OrderPage {
-        Order[] orders; // 現在のページのオーダー
-        uint256 nextPrice; // 次のページの開始価格（0の場合は最後のページ）
-        uint256 totalCount; // 全オーダー数
-    }
-
     /**
      * @notice Cancels an active order.
      * @param orderId The ID of the order to cancel.
