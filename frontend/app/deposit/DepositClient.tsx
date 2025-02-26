@@ -96,11 +96,11 @@ export default function DepositClient() {
   async function handleApprove() {
     setError("");
     if (!walletClient) {
-      setError("ウォレットが接続されていません");
+      setError("Wallet is not connected");
       return;
     }
     if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
+      setError("Public client not available");
       return;
     }
     setIsLoading(true);
@@ -118,7 +118,7 @@ export default function DepositClient() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
-        setError("Approveの実行に失敗しました");
+        setError("Approve transaction failed");
       } else {
         setTxHash(hash);
         setIsApproved(true);
@@ -127,7 +127,7 @@ export default function DepositClient() {
       }
     } catch (err: unknown) {
       console.error("Approve failed", err);
-      setError((err as Error)?.message || "Approveに失敗しました");
+      setError((err as Error)?.message || "Approve transaction failed");
     } finally {
       setIsLoading(false);
     }
@@ -137,11 +137,11 @@ export default function DepositClient() {
   async function handleDeposit() {
     setError("");
     if (!walletClient) {
-      setError("ウォレットが接続されていません");
+      setError("Wallet is not connected");
       return;
     }
     if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
+      setError("Public client not available");
       return;
     }
     setIsLoading(true);
@@ -158,7 +158,7 @@ export default function DepositClient() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
-        setError("デポジットの実行に失敗しました");
+        setError("Deposit transaction failed");
       } else {
         setTxHash(hash);
         console.log("Deposit successful");
@@ -168,7 +168,7 @@ export default function DepositClient() {
       }
     } catch (err: unknown) {
       console.error("Deposit failed", err);
-      setError((err as Error)?.message || "デポジットに失敗しました");
+      setError((err as Error)?.message || "Deposit transaction failed");
     } finally {
       setIsLoading(false);
     }
@@ -178,11 +178,11 @@ export default function DepositClient() {
   async function handleWithdraw() {
     setError("");
     if (!walletClient) {
-      setError("ウォレットが接続されていません");
+      setError("Wallet is not connected");
       return;
     }
     if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
+      setError("Public client not available");
       return;
     }
     setIsLoading(true);
@@ -199,7 +199,7 @@ export default function DepositClient() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
-        setError("引き出しの実行に失敗しました");
+        setError("Withdrawal transaction failed");
       } else {
         setTxHash(hash);
         console.log("Withdraw successful");
@@ -208,7 +208,7 @@ export default function DepositClient() {
       }
     } catch (err: unknown) {
       console.error("Withdraw failed", err);
-      setError((err as Error)?.message || "引き出しに失敗しました");
+      setError((err as Error)?.message || "Withdrawal transaction failed");
     } finally {
       setIsLoading(false);
     }
@@ -234,7 +234,7 @@ export default function DepositClient() {
 
       {/* Display current balance */}
       <div className="mb-4 text-white">
-        現在の預け入れ残高: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
+        Current deposit balance: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
       </div>
 
       {error && <p className="mb-4 text-red-500">{error}</p>}
@@ -282,7 +282,7 @@ export default function DepositClient() {
                 disabled={isLoading || !amount || amount === "0"}
                 className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
               >
-                {isLoading ? "処理中..." : "Approve"}
+                {isLoading ? "Processing..." : "Approve"}
               </button>
             ) : (
               <button
@@ -291,7 +291,7 @@ export default function DepositClient() {
                 disabled={isLoading || !amount || amount === "0"}
                 className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
               >
-                {isLoading ? "処理中..." : "Deposit"}
+                {isLoading ? "Processing..." : "Deposit"}
               </button>
             )}
           </div>
@@ -316,7 +316,7 @@ export default function DepositClient() {
               disabled={isLoading || !amount || amount === "0"}
               className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
             >
-              {isLoading ? "処理中..." : "Withdraw"}
+              {isLoading ? "Processing..." : "Withdraw"}
             </button>
           </div>
         </div>
