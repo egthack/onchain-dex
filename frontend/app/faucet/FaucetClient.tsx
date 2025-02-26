@@ -34,10 +34,10 @@ const SUPPORTED_TOKENS = [
 
 const FAUCET_ADDRESS = (env.NEXT_PUBLIC_FAUCET_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 const TOKEN_ADDRESSES = {
-  USDC: "0xf96c5D210da8Ad33b2BAdEeDF59cCAEBBb4e2629",
-  WETH: "0xb0FA0536A85DfbFA078f51D8a52A009A86F7cc72",
-  WBTC: "0xd59874ceC35C7E9Ff121e27Ac72367Bbc28f3FE8",
-  POL: "0xfB9519fD8730Bff3Cf8469C5634B6338E95a378e"
+  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
 };
 
 const faucetAbi = FaucetAbi.abi;
@@ -48,6 +48,9 @@ export default function FaucetClient() {
   const publicClient = usePublicClient();
   const [selectedToken, setSelectedToken] = useState(SUPPORTED_TOKENS[0]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
 
   const handleMint = async () => {
     if (!isConnected || !walletClient || !publicClient) return;
@@ -60,10 +63,20 @@ export default function FaucetClient() {
         args: [TOKEN_ADDRESSES[selectedToken.symbol as keyof typeof TOKEN_ADDRESSES], selectedToken.amount],
         gas: BigInt(300000)
       });
-      await publicClient.waitForTransactionReceipt({ hash });
-      console.log(`Minted ${selectedToken.amount} ${selectedToken.symbol}`);
-    } catch (error) {
-      console.error("Failed to mint:", error);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        setError("Request faucet transaction failed");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log(`Request ${selectedToken.amount} ${selectedToken.symbol} to faucet`);
+      }
+    } catch (err: unknown) {
+      const errorMessage = (err instanceof Error) ? err.message : "Request faucet transaction failed";
+      console.error("Failed to request faucet:", err);
+      setError(errorMessage);
+      setModalOpen(true);
     } finally {
       setIsLoading(false);
     }
@@ -134,6 +147,45 @@ export default function FaucetClient() {
           )}
         </div>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
+            {error ? (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Failed</h3>
+                <p className="break-all mb-3">{error}</p>
+                <p className="text-sm text-gray-400">
+                  You may have already used the faucet within the last 24 hours.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
+                <p className="break-all mb-3">
+                  Tx Hash: <a
+                    href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-green underline"
+                  >
+                    {txHash}
+                  </a>
+                </p>
+              </>
+            )}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => { setModalOpen(false); setError(""); }}
+                className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
