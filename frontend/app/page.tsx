@@ -59,6 +59,7 @@ export default function TradingPage() {
   const [depositBalanceQuote, setDepositBalanceQuote] = useState<bigint>(BigInt(0));
 
   const [cancelOrderId, setCancelOrderId] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
 
   // トークンシンボルからデシマル値を取得する関数
   function getTokenDecimals(symbol: string): number {
@@ -172,6 +173,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash });
       setTxHash(hash);
+      setModalOpen(true);
       console.log("Deposit successful");
       fetchDepositBalance();
     } catch (err: unknown) {
@@ -213,6 +215,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
       setTxHash(hashWithdraw);
+      setModalOpen(true);
       console.log("Withdraw successful");
       fetchDepositBalance();
     } catch (err: unknown) {
@@ -232,6 +235,7 @@ export default function TradingPage() {
     setTxHash("");
     if (!walletClient || !publicClient) {
       setError("ウォレットまたはパブリッククライアントが接続されていません");
+      setIsLoading(false);
       return;
     }
     if (!address) {
@@ -322,6 +326,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash });
       setTxHash(hash);
+      setModalOpen(true);
       console.log("Order placed successfully via TradingVault");
       fetchDepositBalance();
     } catch (err: unknown) {
@@ -362,6 +367,7 @@ export default function TradingPage() {
       });
       await publicClient.waitForTransactionReceipt({ hash: hashApprove });
       setTxHash(hashApprove);
+      setModalOpen(true);
       console.log("Approve successful");
       fetchDepositBalance();
     } catch (err: unknown) {
@@ -402,6 +408,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash });
       setTxHash(hash);
+      setModalOpen(true);
       console.log("USDC Deposit successful");
       fetchDepositBalanceQuote();
     } catch (err: unknown) {
@@ -442,6 +449,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
       setTxHash(hashWithdraw);
+      setModalOpen(true);
       console.log("USDC Withdraw successful");
       fetchDepositBalanceQuote();
     } catch (err: unknown) {
@@ -481,6 +489,7 @@ export default function TradingPage() {
       });
       await publicClient.waitForTransactionReceipt({ hash: hashApprove });
       setTxHash(hashApprove);
+      setModalOpen(true);
       console.log("USDC Approve successful");
       fetchDepositBalanceQuote();
     } catch (err: unknown) {
@@ -518,6 +527,7 @@ export default function TradingPage() {
 
       await publicClient.waitForTransactionReceipt({ hash });
       setTxHash(hash);
+      setModalOpen(true);
       console.log("Cancel order successful");
     } catch (err: unknown) {
       console.error("Cancel order failed", err);
@@ -933,6 +943,33 @@ export default function TradingPage() {
           </div>
         </div>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
+            <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
+            <p className="break-all mb-3">
+              Tx Hash: <a
+                href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet-explorer.riselabs.xyz'}/tx/${txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-green underline"
+              >
+                {txHash}
+              </a>
+            </p>
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
