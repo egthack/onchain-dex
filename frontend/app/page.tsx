@@ -5,6 +5,7 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../abi/ITradingVault.json";
 import ERC20ABI from "../abi/IERC20.json";
 import * as ethers from "ethers";
+import env from "../env.json";
 
 const TRADING_PAIRS = [
   { base: "WETH", quote: "USDC" },
@@ -13,10 +14,10 @@ const TRADING_PAIRS = [
 ];
 
 const TOKEN_ADDRESSES = {
-  WETH: process.env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
-  USDC: process.env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
-  WBTC: process.env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
-  POL: process.env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
+  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
 };
 
 // トークンごとのデシマル値を定義
@@ -27,7 +28,7 @@ const TOKEN_DECIMALS = {
   POL: 18
 };
 
-const VAULT_ADDRESS = (process.env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
+const VAULT_ADDRESS = (env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 
 const vaultAbi = TradingVaultABI.abi;
 const erc20Abi = ERC20ABI.abi;
@@ -950,7 +951,7 @@ export default function TradingPage() {
             <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
             <p className="break-all mb-3">
               Tx Hash: <a
-                href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet-explorer.riselabs.xyz'}/tx/${txHash}`}
+                href={`${env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet-explorer.riselabs.xyz'}/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-accent-green underline"
