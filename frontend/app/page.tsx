@@ -62,6 +62,11 @@ export default function TradingPage() {
   const [cancelOrderId, setCancelOrderId] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
+  const [marketPriceError, setMarketPriceError] = useState("");
+  const [marketAmountError, setMarketAmountError] = useState("");
+  const [limitPriceError, setLimitPriceError] = useState("");
+  const [limitAmountError, setLimitAmountError] = useState("");
+
   // トークンシンボルからデシマル値を取得する関数
   function getTokenDecimals(symbol: string): number {
     return TOKEN_DECIMALS[symbol as keyof typeof TOKEN_DECIMALS] || 18; // デフォルトは18
@@ -278,8 +283,8 @@ export default function TradingPage() {
           setIsLoading(false);
           return;
         }
-        amountBN = BigInt(marketAmount);
-        priceBN = BigInt(marketPrice);
+        amountBN = BigInt(Math.floor(Number.parseFloat(marketAmount) * 1000000));
+        priceBN = BigInt(Math.floor(Number.parseFloat(marketPrice) * 100));
       } else {
         if (!limitAmount || limitAmount === "0") {
           setError("数量を入力してください");
@@ -291,8 +296,8 @@ export default function TradingPage() {
           setIsLoading(false);
           return;
         }
-        amountBN = BigInt(limitAmount);
-        priceBN = BigInt(limitPrice);
+        amountBN = BigInt(Math.floor(Number.parseFloat(limitAmount) * 1000000));
+        priceBN = BigInt(Math.floor(Number.parseFloat(limitPrice) * 100));
       }
 
       // 署名処理の修正部分
@@ -689,11 +694,21 @@ export default function TradingPage() {
                     <input
                       id="market-price-input"
                       type="number"
+                      step="0.01"
                       className="trading-input"
                       placeholder="0.00"
                       value={marketPrice}
-                      onChange={(e) => setMarketPrice(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMarketPrice(value);
+                        if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
+                          setMarketPriceError("価格は小数点以下2桁まで入力可能です");
+                        } else {
+                          setMarketPriceError("");
+                        }
+                      }}
                     />
+                    {marketPriceError && <p className="text-xs text-red-500">{marketPriceError}</p>}
                   </div>
                   <div>
                     <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
@@ -702,11 +717,21 @@ export default function TradingPage() {
                     <input
                       id="market-amount-input"
                       type="number"
+                      step="0.000001"
                       className="trading-input"
                       placeholder="0.00"
                       value={marketAmount}
-                      onChange={(e) => setMarketAmount(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMarketAmount(value);
+                        if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
+                          setMarketAmountError("数量は小数点以下6桁まで入力可能です");
+                        } else {
+                          setMarketAmountError("");
+                        }
+                      }}
                     />
+                    {marketAmountError && <p className="text-xs text-red-500">{marketAmountError}</p>}
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
@@ -723,24 +748,44 @@ export default function TradingPage() {
                     <input
                       id="limit-price-input"
                       type="number"
+                      step="0.01"
                       className="trading-input"
                       placeholder="0.00"
                       value={limitPrice}
-                      onChange={(e) => setLimitPrice(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setLimitPrice(value);
+                        if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
+                          setLimitPriceError("価格は小数点以下2桁まで入力可能です");
+                        } else {
+                          setLimitPriceError("");
+                        }
+                      }}
                     />
+                    {limitPriceError && <p className="text-xs text-red-500">{limitPriceError}</p>}
                   </div>
                   <div>
                     <label htmlFor="limit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
                       Amount ({selectedPair.base})
-                    </label>
+                    </label>8
                     <input
                       id="limit-amount-input"
                       type="number"
+                      step="0.000001"
                       className="trading-input"
                       placeholder="0.00"
                       value={limitAmount}
-                      onChange={(e) => setLimitAmount(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setLimitAmount(value);
+                        if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
+                          setLimitAmountError("数量は小数点以下6桁まで入力可能です");
+                        } else {
+                          setLimitAmountError("");
+                        }
+                      }}
                     />
+                    {limitAmountError && <p className="text-xs text-red-500">{limitAmountError}</p>}
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
