@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../abi/ITradingVault.json";
-import ERC20ABI from "../abi/IERC20.json";
 import * as ethers from "ethers";
 import env from "../env.json";
 
@@ -31,7 +30,6 @@ const TOKEN_DECIMALS = {
 const VAULT_ADDRESS = (env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 
 const vaultAbi = TradingVaultABI.abi;
-const erc20Abi = ERC20ABI.abi;
 
 export default function TradingPage() {
   const { address, isConnected } = useAccount();
@@ -63,48 +61,21 @@ export default function TradingPage() {
   const [limitPriceError, setLimitPriceError] = useState("");
   const [limitAmountError, setLimitAmountError] = useState("");
 
+  const [balanceWarning, setBalanceWarning] = useState("");
+
   // トークンシンボルからデシマル値を取得する関数
-  function getTokenDecimals(symbol: string): number {
+  const getTokenDecimals = useCallback((symbol: string): number => {
     return TOKEN_DECIMALS[symbol as keyof typeof TOKEN_DECIMALS] || 18; // デフォルトは18
-  }
+  }, []);
 
-  // 数値を適切なデシマル値に変換する関数
-  function convertToTokenUnits(amount: string, decimals: number): bigint {
-    if (!amount || amount === "0") return BigInt(0);
-    // 小数点以下の桁数を考慮して変換
-    const parts = amount.split('.');
-    let result = parts[0];
-    
-    if (parts.length > 1) {
-      let fraction = parts[1];
-      // 小数点以下がデシマル値より長い場合は切り捨て
-      if (fraction.length > decimals) {
-        fraction = fraction.substring(0, decimals);
-      } else {
-        // 足りない場合は0で埋める
-        fraction = fraction.padEnd(decimals, '0');
-      }
-      result += fraction;
-    } else {
-      // 小数点がない場合は0を追加
-      result += '0'.repeat(decimals);
-    }
-    
-    // 先頭の0を削除
-    result = result.replace(/^0+/, '');
-    if (result === '') result = '0';
-    
-    return BigInt(result);
-  }
-
-  function formatTokenUnits(amount: bigint, decimals: number): string {
+  const formatTokenUnits = useCallback((amount: bigint, decimals: number): string => {
     const s = amount.toString().padStart(decimals + 1, '0');
     const integerPart = s.slice(0, s.length - decimals);
     let fractionPart = s.slice(s.length - decimals);
     // Trim trailing zeros
     fractionPart = fractionPart.replace(/0+$/, '');
     return fractionPart ? `${integerPart}.${fractionPart}` : integerPart;
-  }
+  }, []);
 
   const fetchDepositBalance = useCallback(async () => {
     if (!isConnected || !address || !publicClient) return;
@@ -147,6 +118,41 @@ export default function TradingPage() {
   useEffect(() => {
     fetchDepositBalanceQuote();
   }, [fetchDepositBalanceQuote]);
+
+  // useEffect to check balance warning
+  useEffect(() => {
+    let warning = "";
+    if (orderType === "market") {
+      if (side === "buy" && marketAmount && marketPrice) {
+        const estimatedTotal = Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice);
+        const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
+        if (estimatedTotal > availableUSDC) {
+          warning = "注文総額が利用可能な預入残高のUSDCを超えています";
+        }
+      } else if (side === "sell" && marketAmount) {
+        const amountValue = Number.parseFloat(marketAmount);
+        const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
+        if (amountValue > availableToken) {
+          warning = "注文数量が利用可能な預入残高を超えています";
+        }
+      }
+    } else { // limit orders
+      if (side === "buy" && limitAmount && limitPrice) {
+        const estimatedTotal = Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice);
+        const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
+        if (estimatedTotal > availableUSDC) {
+          warning = "注文総額が利用可能な預入残高のUSDCを超えています";
+        }
+      } else if (side === "sell" && limitAmount) {
+        const amountValue = Number.parseFloat(limitAmount);
+        const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
+        if (amountValue > availableToken) {
+          warning = "注文数量が利用可能な預入残高を超えています";
+        }
+      }
+    }
+    setBalanceWarning(warning);
+  }, [orderType, side, marketAmount, marketPrice, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
 
   async function handlePlaceOrder() {
     setError("");
@@ -450,6 +456,7 @@ export default function TradingPage() {
                     {marketAmount && marketPrice ? (Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
                   </span>
                 </div>
+                {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
               </div>
             ) : (
               <div className="space-y-3">
@@ -502,8 +509,11 @@ export default function TradingPage() {
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Estimated Total: <span className="text-white">0.00 {selectedPair.quote}</span>
+                  Estimated Total: <span className="text-white">
+                    {limitAmount && limitPrice ? (Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
+                  </span>
                 </div>
+                {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
               </div>
             )}
 
