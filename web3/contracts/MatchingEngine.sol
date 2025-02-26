@@ -159,6 +159,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
         uint256 decimalsBase = IERC20(base).decimals();
         uint256 decimalsQuote = IERC20(quote).decimals();
+        require(decimalsBase >= 6, "Base token decimals must be at least 6");
+        require(decimalsQuote >= 6, "Quote token decimals must be at least 6");
         pairs[pairId] = Pair({
             tokenz: [base, quote],
             decimals: [decimalsBase, decimalsQuote],
@@ -217,8 +219,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid pair"
         );
 
-        // 価格を小数点以下2桁の精度に切り捨て
-        uint256 truncatedPrice = price > 0 ? _truncatePrice(price) : 0;
+        uint256 finalPrice = price;
 
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -226,7 +227,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             user: user,
             base: base,
             quote: quote,
-            price: truncatedPrice,
+            price: finalPrice,
             amount: amount,
             side: side,
             timestamp: block.timestamp,
@@ -236,14 +237,14 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
-            ob.buyOrdersAtPrice[truncatedPrice].push(orderId);
-            if (!ob.buyTree.exists(truncatedPrice)) {
-                ob.buyTree.insert(truncatedPrice);
+            ob.buyOrdersAtPrice[finalPrice].push(orderId);
+            if (!ob.buyTree.exists(finalPrice)) {
+                ob.buyTree.insert(finalPrice);
             }
         } else {
-            ob.sellOrdersAtPrice[truncatedPrice].push(orderId);
-            if (!ob.sellTree.exists(truncatedPrice)) {
-                ob.sellTree.insert(truncatedPrice);
+            ob.sellOrdersAtPrice[finalPrice].push(orderId);
+            if (!ob.sellTree.exists(finalPrice)) {
+                ob.sellTree.insert(finalPrice);
             }
         }
         emit OrderPlaced(
@@ -252,7 +253,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             side,
             base,
             quote,
-            truncatedPrice,
+            finalPrice,
             amount
         );
         return orderId;
@@ -307,20 +308,20 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             iterations < MAX_MATCH_ITERATIONS
         ) {
             iterations++;
-            uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
+            uint256[] storage sellList = ob.sellOrdersAtPrice[incoming.price];
 
             for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
                 (remaining, i) = _processBuyMatch(
                     orderId,
                     remaining,
-                    bestSellPrice,
+                    incoming.price,
                     sellList,
                     i
                 );
             }
 
             if (sellList.length == 0) {
-                ob.sellTree.remove(bestSellPrice);
+                ob.sellTree.remove(incoming.price);
             }
             bestSellPrice = ob.sellTree.getMin();
         }
@@ -403,7 +404,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 sellOrderId,
                 incoming.base,
                 incoming.quote,
-                bestSellPrice,
+                incoming.price,
                 fill,
                 makerFee,
                 takerFee
@@ -430,20 +431,20 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             iterations < MAX_MATCH_ITERATIONS
         ) {
             iterations++;
-            uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
+            uint256[] storage buyList = ob.buyOrdersAtPrice[incoming.price];
 
             for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
                 (remaining, i) = _processSellMatch(
                     orderId,
                     remaining,
-                    bestBuyPrice,
+                    incoming.price,
                     buyList,
                     i
                 );
             }
 
             if (buyList.length == 0) {
-                ob.buyTree.remove(bestBuyPrice);
+                ob.buyTree.remove(incoming.price);
             }
             bestBuyPrice = ob.buyTree.getMax();
         }
@@ -520,7 +521,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 orderId,
                 incoming.base,
                 incoming.quote,
-                bestBuyPrice,
+                incoming.price,
                 fill,
                 makerFee,
                 takerFee
@@ -864,10 +865,5 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             return MINIMUM_AMOUNT;
         }
         return truncated;
-    }
-
-    /// @notice 価格を小数点以下2桁の精度に切り捨て
-    function _truncatePrice(uint256 price) internal pure returns (uint256) {
-        return (price / PRICE_PRECISION_FACTOR) * PRICE_PRECISION_FACTOR;
     }
 }

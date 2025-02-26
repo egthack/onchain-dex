@@ -8,379 +8,943 @@ import {
   getTokenBalances,
 } from "./helpers/tradeHelper";
 
-interface Fixture {
-  owner: Signer;
-  user: Signer;
-  trader: Signer;
-  baseToken: MockERC20;
-  usdcToken: MockERC20;
-  lowDecimalToken: MockERC20;
-  vault: TradingVault;
-  engine: MatchingEngine;
-}
-
-async function deployFixture(): Promise<Fixture> {
-  const signers = await ethers.getSigners();
-  const owner = signers[0];
-  const user = signers[1];
-  const trader = signers[2];
-
-  // Deploy MockERC20 tokens
-  const TokenFactory = await ethers.getContractFactory("MockERC20");
-  const baseToken = await TokenFactory.connect(owner).deploy("Mock Base Token", "MBASE", 1000000000, 18);
-  await baseToken.waitForDeployment();
-  const usdcToken = await TokenFactory.connect(owner).deploy("Mock USDC Token(Quote)", "USDC", 1000000000, 6);
-  await usdcToken.waitForDeployment();
-  const lowDecimalToken = await TokenFactory.connect(owner).deploy("Low Decimal Token", "LOW", 1000000000, 5);
-  await lowDecimalToken.waitForDeployment();
-
-  // Transfer tokens to user for deposit tests
-  await baseToken.connect(owner).transfer(await user.getAddress(), ethers.parseUnits("10000", 18));
-  await usdcToken.connect(owner).transfer(await user.getAddress(), ethers.parseUnits("10000", 6));
-  await lowDecimalToken.connect(owner).transfer(await user.getAddress(), ethers.parseUnits("10000", 5));
-
-  // Deploy MatchingEngine with makerFeeRate = 10, takerFeeRate = 15
-  const EngineFactory = await ethers.getContractFactory("MatchingEngine");
-  const engine = await EngineFactory.connect(owner).deploy(10, 15);
-  await engine.waitForDeployment();
-
-  // Add trading pair for baseToken and usdcToken
-  await engine.connect(owner).addPair(await baseToken.getAddress(), await usdcToken.getAddress());
-
-  // Deploy TradingVault with engine address
-  const VaultFactory = await ethers.getContractFactory("TradingVault");
-  const vault = await VaultFactory.connect(owner).deploy(await engine.getAddress());
-  await vault.waitForDeployment();
-
-  // Set vault address in MatchingEngine
-  await engine.connect(owner).setVaultAddress(await vault.getAddress());
-
-  return { owner, user, trader, baseToken, usdcToken, lowDecimalToken, vault, engine };
-}
-
-/***********************
- * MatchingEngine Deployment & Setup
- ***********************/
-describe("MatchingEngine Contract Deployment & Setup", function () {
-  let fixture: Fixture;
+describe("MatchingEngine", function () {
+  let admin: Signer;
+  let user: Signer;
+  let trader: Signer;
+  let trader2: Signer;
+  let matchingEngine: MatchingEngine;
+  let vault: TradingVault;
+  let baseTokenA: MockERC20;
+  let baseTokenB: MockERC20;
+  let quoteTokenA: MockERC20;
+  let quoteTokenB: MockERC20;
 
   beforeEach(async function () {
-    fixture = await deployFixture();
+    const signers = await ethers.getSigners();
+    admin = signers[0];
+    user = signers[1];
+    trader = signers[2];
+    trader2 = signers[3];
+    // --- ERC20 トークンのデプロイ (MockERC20) ---
+    const TokenFactory = await ethers.getContractFactory("MockERC20");
+    // BTCとかETHとか
+    baseTokenA = await TokenFactory.connect(admin).deploy(
+      "Base Token A",
+      "BASEA",
+      100000000,
+      18
+    );
+    await baseTokenA.waitForDeployment();
+    // USDとかJPYとか
+    quoteTokenA = await TokenFactory.connect(admin).deploy(
+      "Quote Token A",
+      "QUOTEA",
+      100000000,
+      18
+    );
+    await quoteTokenA.waitForDeployment();
+
+    baseTokenB = await TokenFactory.connect(admin).deploy(
+      "Base Token B",
+      "BASEB",
+      100000000,
+      18
+    );
+    await baseTokenB.waitForDeployment();
+
+    quoteTokenB = await TokenFactory.connect(admin).deploy(
+      "Quote Token B",
+      "QUOTEB",
+      100000000,
+      6
+    );
+    await quoteTokenB.waitForDeployment();
+
+    // --- MatchingEngine のデプロイ ---
+    const MatchingEngineFactory = await ethers.getContractFactory(
+      "MatchingEngine"
+    );
+    // TODO: 一旦簡単のため、makerFeeRate = 0 (0%), takerFeeRate = 0 (0%)
+    matchingEngine = await MatchingEngineFactory.connect(admin).deploy(0, 0);
+    await matchingEngine.waitForDeployment();
+
+    // --- TradingVault のデプロイ (Vault として利用) ---
+    const VaultFactory = await ethers.getContractFactory("TradingVault");
+    vault = await VaultFactory.connect(admin).deploy(
+      await matchingEngine.getAddress()
+    );
+    await vault.waitForDeployment();
+
+    // --- MatchingEngine に Vault アドレスを設定 ---
+    await matchingEngine
+      .connect(admin)
+      .setVaultAddress(await vault.getAddress());
+
+    // --- Trading Pair の追加 ---
+    await matchingEngine
+      .connect(admin)
+      .addPair(await baseTokenA.getAddress(), await quoteTokenA.getAddress());
+
+    await baseTokenA.connect(admin).transfer(await user.getAddress(), 10000);
+    await baseTokenA.connect(user).approve(await vault.getAddress(), 10000);
+    await vault.connect(user).deposit(await baseTokenA.getAddress(), 10000);
+
+    await baseTokenA.connect(admin).transfer(await trader.getAddress(), 10000);
+    await baseTokenA.connect(trader).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader).deposit(await baseTokenA.getAddress(), 10000);
+
+    // trader2 の初期設定を追加
+    await baseTokenA.connect(admin).transfer(await trader2.getAddress(), 10000);
+    await baseTokenA.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await baseTokenA.getAddress(), 10000);
+
+    await quoteTokenA.connect(admin).transfer(await user.getAddress(), 10000);
+    await quoteTokenA.connect(user).approve(await vault.getAddress(), 10000);
+    await vault.connect(user).deposit(await quoteTokenA.getAddress(), 10000);
+
+    await quoteTokenA.connect(admin).transfer(await trader.getAddress(), 10000);
+    await quoteTokenA.connect(trader).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader).deposit(await quoteTokenA.getAddress(), 10000);
+
+    // trader2 の初期設定を追加
+    await quoteTokenA
+      .connect(admin)
+      .transfer(await trader2.getAddress(), 10000);
+    await quoteTokenA.connect(trader2).approve(await vault.getAddress(), 10000);
+    await vault.connect(trader2).deposit(await quoteTokenA.getAddress(), 10000);
   });
 
-  it("should deploy the contracts and set vault correctly", async function () {
-    expect(await fixture.engine.getAddress()).to.properAddress;
-    expect(await fixture.vault.getAddress()).to.properAddress;
-  });
-});
-
-/***********************
- * Execute Trade Tests
- ***********************/
-describe("Execute Trade", function () {
-  let fixture: Fixture;
-
-  beforeEach(async function () {
-    fixture = await deployFixture();
-  });
-
-  it("should revert if base token has less than 6 decimals (Buy order)", async function () {
-    // Deposit USDC
-    const depositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), depositAmount);
-    
-    // Add pair: lowDecimalToken (base) and USDC (quote)
-    await fixture.engine.connect(fixture.owner).addPair(await fixture.lowDecimalToken.getAddress(), await fixture.usdcToken.getAddress());
-    
-    // Create Buy order trade request
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.lowDecimalToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 100,
-      price: 100
+  describe("Pair Management", function () {
+    it("should add a new pair and retrieve pair info", async function () {
+      const pair = await matchingEngine.getPair(0);
+      expect(pair.pairId).to.exist;
+      expect(pair.tokenz[0]).to.equal(await baseTokenA.getAddress());
+      expect(pair.tokenz[1]).to.equal(await quoteTokenA.getAddress());
+      expect(pair.decimals[0]).to.equal(18);
+      expect(pair.decimals[1]).to.equal(18);
     });
 
-    await expect(fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]))
-      .to.be.revertedWithCustomError(fixture.vault, "InsufficientDecimals")
-      .withArgs(await fixture.lowDecimalToken.getAddress(), 5);
+    it("should return an array of pairs with getPairs()", async function () {
+      // 別のペアを追加
+      await matchingEngine
+        .connect(admin)
+        .addPair(await baseTokenB.getAddress(), await quoteTokenB.getAddress());
+      const pairs = await matchingEngine.getPairsWithPagination(0, 10);
+      expect(pairs.length).to.equal(2);
+
+      // ペアの内容検証
+      expect(pairs[0].tokenz[0]).to.equal(await baseTokenA.getAddress());
+      expect(pairs[0].tokenz[1]).to.equal(await quoteTokenA.getAddress());
+
+      // 2番目のペアの検証を追加
+      expect(pairs[1].tokenz[0]).to.equal(await baseTokenB.getAddress());
+      expect(pairs[1].tokenz[1]).to.equal(await quoteTokenB.getAddress());
+    });
   });
 
-  it("should revert if quote token has less than 6 decimals (Sell order)", async function () {
-    // Deposit base token
-    const depositAmount = ethers.parseUnits("1000", 18);
-    await fixture.baseToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.baseToken.getAddress(), depositAmount);
-    
-    // Add pair: baseToken and lowDecimalToken (quote)
-    await fixture.engine.connect(fixture.owner).addPair(await fixture.baseToken.getAddress(), await fixture.lowDecimalToken.getAddress());
-    
-    // Create Sell order trade request
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.lowDecimalToken,
-      side: 1, // Sell
-      amount: 100,
-      price: 100
+  describe("Order Creation via Vault", function () {
+    it("should create a single order properly through vault", async function () {
+      // --- user によるトークン入金の準備 ---
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
+      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
+
+      // --- Trade Request の作成 (Buy order: side = 0) ---
+      // この例では amount = 100, price = 1 とする
+      // Traderが
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 1,
+      });
+
+      // --- Vault 経由で注文実行 ---
+      await vault.connect(user).executeTradeBatch([tradeRequest]);
+
+      // --- MatchingEngine にオーダーが作成されていることを検証 ---
+      const order = await matchingEngine.getOrder(0);
+      expect(order.id).to.equal(0);
+      // トレーダー (trader) が executeTradeBatch を実行したが、取引は は user（委任者） になる
+      expect(order.user).to.equal(await user.getAddress());
+      expect(order.base).to.equal(await baseTokenA.getAddress());
+      expect(order.quote).to.equal(await quoteTokenA.getAddress());
+      // _executeSingleTrade で注文価格として amount をそのまま price にしている前提（簡易例）
+      expect(order.price).to.equal(1);
+      expect(order.amount).to.equal(100);
+      expect(order.active).to.equal(true);
     });
 
-    await expect(fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]))
-      .to.be.revertedWithCustomError(fixture.vault, "InsufficientDecimals")
-      .withArgs(await fixture.lowDecimalToken.getAddress(), 5);
-  });
+    it("should create multiple orders properly through vault", async function () {
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
+      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
+      await quoteTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), 100000);
+      await quoteTokenA.connect(user).approve(await vault.getAddress(), 100000);
+      await vault.connect(user).deposit(await quoteTokenA.getAddress(), 100000);
 
-  it("should revert if trade amount is below the minimum threshold", async function () {
-    // Deposit base and quote
-    const depositAmount = ethers.parseUnits("1000", 18);
-    await fixture.baseToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.baseToken.getAddress(), depositAmount);
-    const quoteDepositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), quoteDepositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), quoteDepositAmount);
-    
-    // Create Sell order with amount = 0 (below minimum)
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 1, // Sell
-      amount: 0,
-      price: 100
+      const sellRequests = [];
+      for (let i = 0; i < 5; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1,
+          amount: 100,
+          price: 100 + i,
+        });
+        sellRequests.push(tradeRequest);
+      }
+      await vault.connect(user).executeTradeBatch(sellRequests);
+
+      const buyRequests = [];
+      for (let i = 0; i < 5; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0,
+          amount: 100,
+          price: 99 - i,
+        });
+        buyRequests.push(tradeRequest);
+      }
+      await vault.connect(user).executeTradeBatch(buyRequests);
+
+      // Matchingしないはず
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(0);
+
+      const order = await matchingEngine.getOrder(0);
+      expect(order.id).to.equal(0);
+      expect(order.user).to.equal(await user.getAddress());
+      expect(order.base).to.equal(await baseTokenA.getAddress());
+      expect(order.quote).to.equal(await quoteTokenA.getAddress());
+      expect(order.price).to.equal(100);
+      expect(order.amount).to.equal(100);
+      expect(order.active).to.equal(true);
+
+      const page = await matchingEngine.getOrdersWithPagination(
+        await matchingEngine.getPairId(
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress()
+        ),
+        0, // Buy side
+        0,
+        10
+      );
+
+      // console.log("Orders:", {
+      //   orders: page.orders.map((o) => ({
+      //     id: o.id.toString(),
+      //     price: o.price.toString(),
+      //     amount: o.amount.toString(),
+      //     active: o.active,
+      //   })),
+      //   nextPrice: page.nextPrice.toString(),
+      //   totalCount: page.totalCount.toString(),
+      // });
+
+      // // 各注文の状態を確認
+      // for (let i = 0; i < 8; i++) {
+      //   const order = await matchingEngine.getOrder(i);
+      //   console.log(`Order ${i}:`, {
+      //     price: order.price.toString(),
+      //     amount: order.amount.toString(),
+      //     active: order.active,
+      //   });
+      // }
+
+      expect(page.orders.length).to.equal(5);
     });
 
-    await expect(fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]))
-      .to.be.revertedWith("Amount below minimum threshold");
+    it("should revert when placeOrder is called directly by a non-vault account", async function () {
+      await expect(
+        matchingEngine.connect(user).placeOrder(
+          await user.getAddress(),
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress(),
+          0, // side Buy
+          100,
+          1
+        )
+      ).to.be.revertedWith("Only vault allowed");
+    });
   });
-});
 
-/***********************
- * Precision Handling Tests
- ***********************/
-describe("Precision Handling", function () {
-  let fixture: Fixture;
+  describe("Order Best Retrieval", function () {
+    it("should retrieve the best buy order", async function () {
+      // --- 複数の Buy Order を発行 ---
+      // 1つ目： price = 1, amount = 100
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 30,
+        price: 1,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-  beforeEach(async function () {
-    fixture = await deployFixture();
+      // 2つ目： price = 2, amount = 100
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 5,
+        price: 2,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
+
+      // --- best order の検証 ---
+      const pairId = await matchingEngine.getPairId(
+        await baseTokenA.getAddress(),
+        await quoteTokenA.getAddress()
+      );
+      const bestBuy = await matchingEngine.getBestOrder(pairId, 0);
+      // 複数注文中、price が高い方（この例では 2）の注文が返ると仮定
+      expect(bestBuy.price).to.equal(2);
+    });
   });
 
-  it("should truncate order amounts to 6 decimals when placing orders (Sell order)", async function () {
-    // Deposit base token
-    const depositAmount = ethers.parseUnits("100", 18);
-    await fixture.baseToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.baseToken.getAddress(), depositAmount);
-    
-    // Create Sell order trade request
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 1, // Sell
-      amount: 10,
-      price: 100
+  describe("Order Cancellation", function () {
+    it("should cancel an active order and mark it inactive", async function () {
+      // --- 事前に注文作成 ---
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 1,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest]);
+      const orderId = 0;
+
+      // --- 注文キャンセル ---
+      await vault.connect(user).cancelOrder(orderId);
+
+      const order = await matchingEngine.getOrder(orderId);
+      expect(order.active).to.equal(false);
+    });
+  });
+
+  describe("Order Matching", function () {
+    // 全量マッチング
+    it("should match orders correctly", async function () {
+      // baseToken を 100 トークンprice 2で買うのでquoteToken 200トークンが出る
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 2,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
+
+      // baseToken を 100 トークンprice 2で売るのでquoteToken 200トークンが入る
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1,
+        amount: 100,
+        price: 2,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
+
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(1);
+
+      // --- 注文結果の検証 ---
+      const order1 = await matchingEngine.getOrder(0);
+      const order2 = await matchingEngine.getOrder(1);
+
+      expect(order1.active).to.equal(false);
+      expect(order2.active).to.equal(false);
+
+      // user baseToken: 10100, quoteToken: 9800
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseTokenA,
+        quoteTokenA
+      );
+      expect(userBalanceBase).to.equal(10100);
+      expect(userBalanceQuote).to.equal(9800);
+      // trader baseToken: 9900, quoteToken: 10200
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      expect(traderBalanceBase).to.equal(9900);
+      expect(traderBalanceQuote).to.equal(10200);
     });
 
-    await fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]);
-    
-    // Retrieve order from MatchingEngine
-    const order = await fixture.engine.getOrder(0);
-    expect(order.amount).to.equal(10);
-    expect(order.price).to.equal(100);
-  });
+    // 全量マッチング
+    it("should match orders correctly with sell order", async function () {
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1,
+        amount: 100,
+        price: 2,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-  it("should lock correct amounts for buy orders", async function () {
-    // Deposit USDC
-    const depositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), depositAmount);
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 2,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
 
-    const balanceBefore = await fixture.vault.getBalance(await fixture.user.getAddress(), await fixture.usdcToken.getAddress());
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(1);
 
-    // Create Buy order trade request
-    // For example: amount = 5, price = 100, so locked amount should be (5*100/100) = 5 in 6-decimal precision
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 5,
-      price: 100
+      // --- 注文結果の検証 ---
+      const order1 = await matchingEngine.getOrder(0);
+      const order2 = await matchingEngine.getOrder(1);
+
+      expect(order1.active).to.equal(false);
+      expect(order2.active).to.equal(false);
+
+      // user baseToken: 9900, quoteToken: 10200
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseTokenA,
+        quoteTokenA
+      );
+      expect(userBalanceBase).to.equal(9900);
+      expect(userBalanceQuote).to.equal(10200);
+      // trader baseToken: 10100, quoteToken: 9800
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      expect(traderBalanceBase).to.equal(10100);
+      expect(traderBalanceQuote).to.equal(9800);
     });
 
-    await fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]);
-    
-    const balanceAfter = await fixture.vault.getBalance(await fixture.user.getAddress(), await fixture.usdcToken.getAddress());
-    const diff = BigInt(balanceBefore) - BigInt(balanceAfter);
-    expect(diff).to.equal(BigInt(5));
-  });
+    // 部分マッチング
+    it("should match orders with partial fill", async function () {
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 1,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-  it("should handle minimum amount correctly", async function () {
-    // Deposit base token
-    const depositAmount = ethers.parseUnits("100", 18);
-    await fixture.baseToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.baseToken.getAddress(), depositAmount);
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1,
+        amount: 50,
+        price: 1,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
 
-    // Create Sell order trade request with minimum amount (1)
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 1, // Sell
-      amount: 1,
-      price: 100
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(1);
+
+      // user baseToken: 10050, quoteToken: 9900
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseTokenA,
+        quoteTokenA
+      );
+      expect(userBalanceBase).to.equal(10050);
+      expect(userBalanceQuote).to.equal(9900);
+      // trader baseToken: 9950, quoteToken: 10050
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      expect(traderBalanceBase).to.equal(9950);
+      expect(traderBalanceQuote).to.equal(10050);
+
+      // 繰り返しマッチング
+      const tradeRequest3 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1,
+        amount: 50,
+        price: 1,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest3]);
+
+      const tradeExecutedEvents2 = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents2.length).to.equal(2);
+
+      // user baseToken: 10100, quoteToken: 9900
+      const {
+        userBalanceBase: userBalanceBase2,
+        userBalanceQuote: userBalanceQuote2,
+      } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+      expect(userBalanceBase2).to.equal(10100);
+      expect(userBalanceQuote2).to.equal(9900);
+
+      // trader baseToken: 9900, quoteToken: 10100
+      const {
+        userBalanceBase: traderBalanceBase2,
+        userBalanceQuote: traderBalanceQuote2,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      expect(traderBalanceBase2).to.equal(9900);
+      expect(traderBalanceQuote2).to.equal(10100);
     });
 
-    await fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]);
-    const order = await fixture.engine.getOrder(0);
-    expect(order.amount).to.equal(1);
-  });
+    // 成行注文
+    it("should match orders with market order", async function () {
+      const tradeRequest1 = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0,
+        amount: 100,
+        price: 1,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-  it("should revert when buy order quote amount is below minimum threshold", async function () {
-    // Deposit USDC
-    const depositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), depositAmount);
+      const tradeRequest2 = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1,
+        amount: 100,
+        price: 1,
+      });
+      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
 
-    // Create Buy order trade request with extremely low amount and price that yield quote below minimum
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 1,
-      price: 1
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(1);
     });
 
-    await expect(fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]))
-      .to.be.revertedWith("Quote amount below minimum threshold");
+    describe("Market Orders", function () {
+      it("should execute market buy order against existing sell orders", async function () {
+        // 指値売り注文を作成
+        const limitSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader).executeTradeBatch([limitSellOrder]);
+        // 成行買い注文を実行
+        const marketBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: 50,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+        // 約定確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        // base: 10025(50/2=25 bought), quote: 9950(50 used)
+        expect(userBalanceBase).to.equal(10025);
+        expect(userBalanceQuote).to.equal(9950);
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        // base: 9900(75 locked, 25 sold), quote: 10050(50 returned)
+        expect(traderBalanceBase).to.equal(9900);
+        expect(traderBalanceQuote).to.equal(10050);
+
+        // trader の50 locked 注文をキャンセルして返金される金額を確認
+        await vault.connect(trader).cancelOrder(0);
+        const {
+          userBalanceBase: traderBalanceBase2,
+          userBalanceQuote: traderBalanceQuote2,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        // base: 9975(9900 + 25 bought 50 locked), quote: 10050(50 returned)
+        expect(traderBalanceBase2).to.equal(9975);
+        expect(traderBalanceQuote2).to.equal(10050);
+      });
+
+      // 成行注文後、オーダーブックの最良売り注文が消えているかを検証するテスト
+      it("should execute market sell order against existing sell orders and not match all", async function () {
+        // 指値売り注文を作成
+        const limitSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader).executeTradeBatch([limitSellOrder]);
+        // 成行買い注文を実行
+        const marketSellOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: 300,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketSellOrder]);
+        // 約定確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+
+        // base: 9900(100 returned), quote: 10200(200 returned)
+        expect(userBalanceBase).to.equal(10100);
+        expect(userBalanceQuote).to.equal(9800);
+        // base: 10100(100 locked), quote: 9800(200 locked)
+        expect(traderBalanceBase).to.equal(9900);
+        expect(traderBalanceQuote).to.equal(10200);
+      });
+
+      it("should remove best sell order from orderbook after market buy execution", async function () {
+        // 最良売り注文を作成 (price = 1)
+        const bestSellOrder = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([bestSellOrder]);
+
+        // 次に高い売り注文を作成 (price = 2)
+        const secondSellOrder = await createTradeRequest({
+          user: trader2,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 2,
+        });
+        await vault.connect(trader2).executeTradeBatch([secondSellOrder]);
+
+        // オーダーブックの最良売り注文を確認
+        const pairId = await matchingEngine.getPairId(
+          await baseTokenA.getAddress(),
+          await quoteTokenA.getAddress()
+        );
+        const bestSellBefore = await matchingEngine.getBestOrder(pairId, 1); // side = 1 for sell
+        expect(bestSellBefore.price).to.equal(1);
+
+        // 成行買い注文を実行
+        const marketBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: 100,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+
+        // 約定イベントを確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+
+        // オーダーブックの最良売り注文が更新されていることを確認
+        const bestSellAfter = await matchingEngine.getBestOrder(pairId, 1);
+        expect(bestSellAfter.price).to.equal(2); // 次に高い注文が最良売り注文になっているはず
+
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        expect(userBalanceBase).to.equal(10100); // 初期値10000 + 買った100
+        expect(userBalanceQuote).to.equal(9900); // 初期値10000 - 支払った100
+      });
+    });
   });
 
-  it("should accept buy order when quote amount equals minimum threshold", async function () {
-    // Deposit USDC
-    const depositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), depositAmount);
+  describe("Bulk Matching", function () {
+    beforeEach(async function () {
+      const requiredAmount = 190000; // 最初のbeforeEachと合わせて200000にする
+      // traderにも同じ量を付与
+      await baseTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), requiredAmount);
+      await baseTokenA
+        .connect(user)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(user)
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
 
-    // Create Buy order trade request where quote amount equals minimum threshold
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 100,
-      price: 100
+      await quoteTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), requiredAmount);
+      await quoteTokenA
+        .connect(user)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(user)
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
+
+      // traderにも必要な量を付与
+      await baseTokenA
+        .connect(admin)
+        .transfer(await trader.getAddress(), requiredAmount);
+      await baseTokenA
+        .connect(trader)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader)
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
+
+      await quoteTokenA
+        .connect(admin)
+        .transfer(await trader.getAddress(), requiredAmount);
+      await quoteTokenA
+        .connect(trader)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader)
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
+
+      // trader2にも同じ量を付与
+      await baseTokenA
+        .connect(admin)
+        .transfer(await trader2.getAddress(), requiredAmount);
+      await baseTokenA
+        .connect(trader2)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader2)
+        .deposit(await baseTokenA.getAddress(), requiredAmount);
+
+      await quoteTokenA
+        .connect(admin)
+        .transfer(await trader2.getAddress(), requiredAmount);
+      await quoteTokenA
+        .connect(trader2)
+        .approve(await vault.getAddress(), requiredAmount);
+      await vault
+        .connect(trader2)
+        .deposit(await quoteTokenA.getAddress(), requiredAmount);
     });
 
-    await expect(fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest])).to.not.be.reverted;
-    const order = await fixture.engine.getOrder(0);
-    expect(order.amount).to.equal(100);
-    expect(order.price).to.equal(100);
-  });
-});
+    it("should match orders correctly with bulk matching", async function () {
+      // MAX_MATCH_ITERATIONSに合わせてバッチサイズを調整
+      const BATCH_SIZE = 50;
+      const sellOrderLength = Math.floor(BATCH_SIZE);
+      const traderRequests = [];
+      // 50個の注文を一気に出す
+      for (let i = 0; i < sellOrderLength; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        traderRequests.push(tradeRequest);
+      }
+      await vault.connect(trader).executeTradeBatch(traderRequests);
 
-/***********************
- * Cancel Order Tests
- ***********************/
-describe("Cancel Order", function () {
-  let fixture: Fixture;
+      // 買い注文を出す
+      const orders = [];
+      for (let i = 0; i < BATCH_SIZE; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: 100,
+          price: 1,
+        });
+        orders.push(tradeRequest);
+      }
+      // 小さなバッチに分割して実行
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < orders.length; i += CHUNK_SIZE) {
+        const chunk = orders.slice(i, i + CHUNK_SIZE);
+        await vault.connect(user).executeTradeBatch(chunk);
+      }
 
-  beforeEach(async function () {
-    fixture = await deployFixture();
-  });
-
-  it("should cancel an active order and refund remaining funds (Buy order)", async function () {
-    // Deposit USDC
-    const depositAmount = ethers.parseUnits("1000", 6);
-    await fixture.usdcToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.usdcToken.getAddress(), depositAmount);
-
-    // Create Buy order trade request
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 100,
-      price: 1
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      expect(tradeExecutedEvents.length).to.equal(orders.length);
     });
-    await fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]);
-    const orderId = 0;
 
-    // Cancel order
-    await fixture.vault.connect(fixture.user).cancelOrder(orderId);
+    it("should match orders correctly with bulk matching market order", async function () {
+      const BATCH_SIZE = 200;
+      const sellOrderLength = Math.floor(BATCH_SIZE);
+      // 200個の売り注文を出す（各100ずつ）
+      for (let i = 0; i < sellOrderLength; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 100,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([tradeRequest]);
+      }
 
-    const balanceAfter = await fixture.vault.getBalance(await fixture.user.getAddress(), await fixture.usdcToken.getAddress());
-    expect(balanceAfter).to.equal(depositAmount);
+      // 成行買い注文を実行
+      const marketBuyOrder = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: 20000,
+        price: 0, // Market order
+      });
+      await vault.connect(user).executeTradeBatch([marketBuyOrder]);
 
-    const orderData = await fixture.engine.getOrder(orderId);
-    expect(orderData.active).to.be.false;
-  });
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseTokenA,
+        quoteTokenA
+      );
+      // 200000(今回付与) + 20000(成行買い注文約定) = 220000
+      expect(userBalanceBase).to.equal(220000);
+      // 200000(今回付与) - 20000(成行買い注文約定 × 価格1) = 180000
+      expect(userBalanceQuote).to.equal(180000);
 
-  it("should handle order cancellation correctly (Sell order)", async function () {
-    // Deposit base token
-    const depositAmount = ethers.parseUnits("1", 18);
-    await fixture.baseToken.connect(fixture.user).approve(await fixture.vault.getAddress(), depositAmount);
-    await fixture.vault.connect(fixture.user).deposit(await fixture.baseToken.getAddress(), depositAmount);
-
-    // Create Sell order trade request
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 1, // Sell
-      amount: 10,
-      price: 100
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      // 200000(今回付与) - 20000(売り注文約定) = 180000
+      expect(traderBalanceBase).to.equal(180000);
+      // 200000(今回付与) + 20000(売り注文約定 × 価格1) = 220000
+      expect(traderBalanceQuote).to.equal(220000);
     });
-    await fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest]);
-    const orderId = 0;
 
-    const balanceBefore = await fixture.vault.getBalance(await fixture.user.getAddress(), await fixture.baseToken.getAddress());
-    // Expect locked amount to be deducted
-    expect(balanceBefore).to.be.below(depositAmount);
+    // 指値で板を食うマッチング
+    it("should match orders correctly with bulk matching limit order", async function () {
+      const BATCH_SIZE = 200;
+      // まず売り注文を出す（買い注文のマッチング先として）
+      // traderが板をならべる状況を作る
+      // 1 - 200 の価格で板をならべる,合計amount 2000
+      const sellOrderLength = Math.floor(BATCH_SIZE);
+      for (let i = 0; i < sellOrderLength; i++) {
+        const tradeRequest = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 10,
+          price: 1 + i,
+        });
+        await vault.connect(trader).executeTradeBatch([tradeRequest]);
+      }
 
-    // Cancel order
-    await fixture.vault.connect(fixture.user).cancelOrder(orderId);
+      // userが板を食う　 1-20までがマッチング対象
+      // 合計 2000 * 200 = 4000000がhi
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: 1000,
+        price: 200,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest]);
 
-    const balanceAfter = await fixture.vault.getBalance(await fixture.user.getAddress(), await fixture.baseToken.getAddress());
-    expect(balanceAfter).to.equal(depositAmount);
-  });
-});
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      // 10の板を100個食うので100イベント
+      expect(tradeExecutedEvents.length).to.equal(100);
+      const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+        vault,
+        user,
+        baseTokenA,
+        quoteTokenA
+      );
+      // 200000(初期保有量) + 1000(userが食った量) = 201000
+      expect(userBalanceBase).to.equal(201000);
+      // 200000(初期保有量) - 200000(userが食った量) = 0
+      expect(userBalanceQuote).to.equal(0);
 
-describe("Minimum Trade Amount Rejection", function () {
-  let fixture: Fixture;
-  beforeEach(async function () {
-    fixture = await deployFixture();
-  });
-
-  it("should revert buy order when calculated quote amount is below minimum threshold", async function () {
-    // amount=1 と price=1 の場合、1*1=1 < 100 となり、require(exactQuoteAmount >= MINIMUM_AMOUNT * 100)によりリバート
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 0, // Buy
-      amount: 1,
-      price: 1
+      const {
+        userBalanceBase: traderBalanceBase,
+        userBalanceQuote: traderBalanceQuote,
+      } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+      // 200000(初期保有量) - 2000(locked) = 198000
+      expect(traderBalanceBase).to.equal(198000);
+      // 並べた板のうち、価格が低いものからamountが1000になるまで、すなわちpriceが1-100までマッチしたはず
+      // １から100までの交差数列の和 × amount = 10 × (100 × 101) / 2 = 50500
+      // 200000(初期保有量) + 50500 = 250500
+      expect(traderBalanceQuote).to.equal(250500);
     });
-    await expect(
-      fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest])
-    ).to.be.revertedWith("Quote amount below minimum threshold");
-  });
-
-  it("should revert sell order when trade amount is below minimum threshold", async function () {
-    // amount=0 は executeTradeBatch の require(req.amount >= MINIMUM_AMOUNT, ...) によりリバート
-    const tradeRequest = await createTradeRequest({
-      user: fixture.user,
-      base: fixture.baseToken,
-      quote: fixture.usdcToken,
-      side: 1, // Sell
-      amount: 0,
-      price: 100
-    });
-    await expect(
-      fixture.vault.connect(fixture.user).executeTradeBatch([tradeRequest])
-    ).to.be.revertedWith("Amount below minimum threshold");
   });
 });
