@@ -852,6 +852,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     function _truncateToMinimumDecimals(
         uint256 amount
     ) internal pure returns (uint256) {
+        // 小さな値（AMOUNT_PRECISION_FACTOR未満）の場合は、そのまま返す
+        if (amount < AMOUNT_PRECISION_FACTOR) {
+            return amount;
+        }
+
         uint256 truncated = (amount / AMOUNT_PRECISION_FACTOR) *
             AMOUNT_PRECISION_FACTOR;
         // 切り捨てによってゼロになるが、元の値が0より大きい場合は最小値を設定
