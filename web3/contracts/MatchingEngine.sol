@@ -311,22 +311,28 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             iterations < MAX_MATCH_ITERATIONS
         ) {
             iterations++;
-            uint256[] storage sellList = ob.sellOrdersAtPrice[incoming.price];
+            // console.log('sellList.length', ob.sellOrdersAtPrice[bestSellPrice].length);
+            // console.log('iterations', iterations);
+            // console.log('remaining', remaining);
+            // console.log('bestSellPrice', bestSellPrice);
+            // console.log('incoming.price', incoming.price);
+            uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
 
             for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
                 (remaining, i) = _processBuyMatch(
                     orderId,
                     remaining,
-                    incoming.price,
+                    bestSellPrice,
                     sellList,
                     i
                 );
             }
 
             if (sellList.length == 0) {
-                ob.sellTree.remove(incoming.price);
+                ob.sellTree.remove(bestSellPrice);
             }
             bestSellPrice = ob.sellTree.getMin();
+            // console.log("new bestSellPrice", bestSellPrice);
         }
 
         _finalizeOrder(incoming, remaining, originalAmount);
@@ -438,22 +444,23 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             iterations < MAX_MATCH_ITERATIONS
         ) {
             iterations++;
-            uint256[] storage buyList = ob.buyOrdersAtPrice[incoming.price];
+            uint256[] storage buyList = ob.buyOrdersAtPrice[bestBuyPrice];
 
             for (uint256 i = 0; i < buyList.length && remaining > 0; ) {
                 (remaining, i) = _processSellMatch(
                     orderId,
                     remaining,
-                    incoming.price,
+                    bestBuyPrice,
                     buyList,
                     i
                 );
             }
 
             if (buyList.length == 0) {
-                ob.buyTree.remove(incoming.price);
+                ob.buyTree.remove(bestBuyPrice);
             }
             bestBuyPrice = ob.buyTree.getMax();
+            // console.log("new bestBuyPrice", bestBuyPrice);
         }
 
         _finalizeOrder(incoming, remaining, originalAmount);

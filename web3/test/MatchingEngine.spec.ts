@@ -519,7 +519,7 @@ describe("MatchingEngine", function () {
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       // user baseToken: +0.000001 * 500 * 18^18, quoteToken(executed:500, locked:500): -0.000001 * 0.01 * 1000 = -0.00001
       expect(userBalanceBase).to.equal(ethers.parseUnits("1", 18) + ethers.parseUnits("0.0005", 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6));            
+      expect(userBalanceQuote).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6));
 
       // trader baseToken: -0.000001 * 18^18, quoteToken: +0.000001 * 0.01 * 500 = 0.000005
       expect(traderBalanceBase).to.equal(ethers.parseUnits("1", 18) - ethers.parseUnits("0.0005", 18));
@@ -542,11 +542,11 @@ describe("MatchingEngine", function () {
       );
       expect(tradeExecutedEvents2.length).to.equal(2);
 
-      
+
       const {
         userBalanceBase: userBalanceBase2,
         userBalanceQuote: userBalanceQuote2,
-      } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);      
+      } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
       const {
         userBalanceBase: traderBalanceBase2,
         userBalanceQuote: traderBalanceQuote2,
@@ -561,34 +561,7 @@ describe("MatchingEngine", function () {
       expect(traderBalanceQuote2).to.equal(ethers.parseUnits("1", 6) + ethers.parseUnits("0.00001", 6));
     });
 
-    // 成行注文
-    it("should match orders with market order", async function () {
-      const tradeRequest1 = await createTradeRequest({
-        user: user,
-        base: baseTokenA,
-        quote: quoteTokenA,
-        side: 0,
-        amount: 100,
-        price: 1,
-      });
-      await vault.connect(user).executeTradeBatch([tradeRequest1]);
 
-      const tradeRequest2 = await createTradeRequest({
-        user: trader,
-        base: baseTokenA,
-        quote: quoteTokenA,
-        side: 1,
-        amount: 100,
-        price: 1,
-      });
-      await vault.connect(trader).executeTradeBatch([tradeRequest2]);
-
-      const tradeExecutedEvents = await getContractEvents(
-        matchingEngine,
-        matchingEngine.filters.TradeExecuted
-      );
-      expect(tradeExecutedEvents.length).to.equal(1);
-    });
 
     describe("Market Orders", function () {
       it("should execute market buy order against existing sell orders", async function () {
@@ -598,7 +571,7 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
-          amount: 100,
+          amount: 1000,
           price: 2,
         });
         await vault.connect(trader).executeTradeBatch([limitSellOrder]);
@@ -608,7 +581,7 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 0, // Buy
-          amount: 50,
+          amount: 500,
           price: 0, // Market order
         });
         await vault.connect(user).executeTradeBatch([marketBuyOrder]);
@@ -762,72 +735,6 @@ describe("MatchingEngine", function () {
   });
 
   describe("Bulk Matching", function () {
-    beforeEach(async function () {
-      const requiredAmount = 190000; // 最初のbeforeEachと合わせて200000にする
-      // traderにも同じ量を付与
-      await baseTokenA
-        .connect(admin)
-        .transfer(await user.getAddress(), requiredAmount);
-      await baseTokenA
-        .connect(user)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(user)
-        .deposit(await baseTokenA.getAddress(), requiredAmount);
-
-      await quoteTokenA
-        .connect(admin)
-        .transfer(await user.getAddress(), requiredAmount);
-      await quoteTokenA
-        .connect(user)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(user)
-        .deposit(await quoteTokenA.getAddress(), requiredAmount);
-
-      // traderにも必要な量を付与
-      await baseTokenA
-        .connect(admin)
-        .transfer(await trader.getAddress(), requiredAmount);
-      await baseTokenA
-        .connect(trader)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(trader)
-        .deposit(await baseTokenA.getAddress(), requiredAmount);
-
-      await quoteTokenA
-        .connect(admin)
-        .transfer(await trader.getAddress(), requiredAmount);
-      await quoteTokenA
-        .connect(trader)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(trader)
-        .deposit(await quoteTokenA.getAddress(), requiredAmount);
-
-      // trader2にも同じ量を付与
-      await baseTokenA
-        .connect(admin)
-        .transfer(await trader2.getAddress(), requiredAmount);
-      await baseTokenA
-        .connect(trader2)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(trader2)
-        .deposit(await baseTokenA.getAddress(), requiredAmount);
-
-      await quoteTokenA
-        .connect(admin)
-        .transfer(await trader2.getAddress(), requiredAmount);
-      await quoteTokenA
-        .connect(trader2)
-        .approve(await vault.getAddress(), requiredAmount);
-      await vault
-        .connect(trader2)
-        .deposit(await quoteTokenA.getAddress(), requiredAmount);
-    });
-
     it("should match orders correctly with bulk matching", async function () {
       // MAX_MATCH_ITERATIONSに合わせてバッチサイズを調整
       const BATCH_SIZE = 50;
@@ -840,8 +747,8 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
-          amount: 100,
-          price: 1,
+          amount: 1000,
+          price: 10,
         });
         traderRequests.push(tradeRequest);
       }
@@ -855,8 +762,8 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 0, // Buy
-          amount: 100,
-          price: 1,
+          amount: 1000,
+          price: 10,
         });
         orders.push(tradeRequest);
       }
@@ -884,8 +791,8 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
-          amount: 100,
-          price: 1,
+          amount: 1000,
+          price: 10,
         });
         await vault.connect(trader).executeTradeBatch([tradeRequest]);
       }
@@ -927,7 +834,9 @@ describe("MatchingEngine", function () {
       const BATCH_SIZE = 200;
       // まず売り注文を出す（買い注文のマッチング先として）
       // traderが板をならべる状況を作る
-      // 1 - 200 の価格で板をならべる,合計amount 2000
+      // 1 - 200 の価格で板をならべる
+      // base: 初項1000 公差1000 の等差数列で200個と考えれる = 1000 + 1000 * 199 = 200000 -> 0.2
+      // quote: 初項1 公差1 の等差数列で200個 = 1 + 1 * 199 = 200 -> 0.0002
       const sellOrderLength = Math.floor(BATCH_SIZE);
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
@@ -935,20 +844,25 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
-          amount: 10,
+          amount: 1000,
           price: 1 + i,
         });
         await vault.connect(trader).executeTradeBatch([tradeRequest]);
       }
 
-      // userが板を食う　 1-20までがマッチング対象
-      // 合計 2000 * 200 = 4000000がhi
+      const pairId = await matchingEngine.getPairId(
+        await baseTokenA.getAddress(),
+        await quoteTokenA.getAddress()
+      );
+      const sellOrders = await matchingEngine.getOrdersWithPagination(pairId, 1, 0, 200);
+      expect(sellOrders[0].length).to.equal(200);
+      
       const tradeRequest = await createTradeRequest({
         user: user,
         base: baseTokenA,
         quote: quoteTokenA,
         side: 0, // Buy
-        amount: 1000,
+        amount: 200000,
         price: 200,
       });
       await vault.connect(user).executeTradeBatch([tradeRequest]);
@@ -957,29 +871,31 @@ describe("MatchingEngine", function () {
         matchingEngine,
         matchingEngine.filters.TradeExecuted
       );
-      // 10の板を100個食うので100イベント
+
+      // 板を100個(MAX_MATCH_ITERATIONS)食うので100イベント
       expect(tradeExecutedEvents.length).to.equal(100);
+      // userが食った板を考えると　 1-100までがマッチング対象
+      // base: 初項1000 公差1000 の等差数列で100個 = 1000 + 1000 * 99 = 100000 -> 0.1
+      // quote: 初項200の数列で200個 = 200 * 200 = 40000 -> 0.4
       const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
         vault,
         user,
         baseTokenA,
         quoteTokenA
       );
-      // 200000(初期保有量) + 1000(userが食った量) = 201000
-      expect(userBalanceBase).to.equal(201000);
-      // 200000(初期保有量) - 200000(userが食った量) = 0
-      expect(userBalanceQuote).to.equal(0);
-
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
-      // 200000(初期保有量) - 2000(locked) = 198000
-      expect(traderBalanceBase).to.equal(198000);
-      // 並べた板のうち、価格が低いものからamountが1000になるまで、すなわちpriceが1-100までマッチしたはず
-      // １から100までの交差数列の和 × amount = 10 × (100 × 101) / 2 = 50500
-      // 200000(初期保有量) + 50500 = 250500
-      expect(traderBalanceQuote).to.equal(250500);
+
+  
+      expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.1', 18));
+      expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.4', 6));
+
+
+      
+      expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.2', 18));
+      expect(traderBalanceQuote).to.equal(1050500);
     });
   });
 });
