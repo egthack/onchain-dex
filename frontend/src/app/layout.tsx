@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import ConnectButton from "@/components/ConnectButton";
 
@@ -19,7 +19,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   href="/"
                   className="text-2xl gradient-text tracking-tight flex items-center gap-2"
                 >
-                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none">
+                  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" aria-labelledby="logoTitle">
+                    <title id="logoTitle">RiseX Logo</title>
                     <path d="M4 4h16v16H4V4z" fill="url(#gradient)" />
                     <path
                       d="M8 16l4-8 4 8H8z"
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <div className="flex gap-3 items-center">
                 <button
                   id="theme-toggle"
+                  type="button"
                   className="p-2 rounded-lg bg-trading-light hover:bg-opacity-80"
                 >
                   <svg
@@ -66,7 +68,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
+                    aria-labelledby="themeToggleTitle"
                   >
+                    <title id="themeToggleTitle">Toggle dark mode</title>
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"

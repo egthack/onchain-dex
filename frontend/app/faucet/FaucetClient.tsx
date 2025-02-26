@@ -69,6 +69,7 @@ export default function FaucetClient() {
             <div className="flex flex-wrap gap-2">
               {SUPPORTED_TOKENS.map((token) => (
                 <button
+                  type="button"
                   key={token.symbol}
                   onClick={() => setSelectedToken(token)}
                   className={`px-4 py-2 rounded-lg font-medium ${
@@ -101,6 +102,7 @@ export default function FaucetClient() {
           {/* Mint Button */}
           {isConnected ? (
             <button
+              type="button"
               onClick={handleMint}
               disabled={isLoading}
               className={`w-full py-3 bg-accent-green text-black font-semibold rounded-lg transition-all ${
