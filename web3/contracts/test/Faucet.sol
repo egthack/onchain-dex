@@ -2,7 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../interfaces/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 contract Faucet is Ownable {
     // トークンアドレスごとの最後のドリップ時刻を記録
@@ -27,7 +28,7 @@ contract Faucet is Ownable {
         );
 
         // トークンの桁数を取得
-        uint8 decimals = IERC20(token).decimals();
+        uint8 decimals = IERC20Metadata(token).decimals();
         // 基本量 * 10^decimals を計算
         uint256 amount = DRIP_AMOUNT * 10 ** decimals;
 

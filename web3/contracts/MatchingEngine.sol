@@ -3,7 +3,8 @@ pragma solidity ^0.8.20;
 
 import "hardhat/console.sol";
 import "./library/RedBlackTreeLib.sol";
-import "./interfaces/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./Events.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -25,6 +26,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     uint256 private constant PRICE_PRECISION_FACTOR = 100;
     /// @notice 最小取引量（1 = 0.000001 * 10^6）
     uint256 private constant MINIMUM_AMOUNT = 1;
+    /// @notice 最小的小数点精度
+    uint8 private constant MINIMUM_DECIMALS = 6;
 
     // OrderBook structure for a specific trading pair.
     struct OrderBook {
@@ -157,8 +160,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
     function addPair(address base, address quote) external onlyOwner {
         bytes32 pairId = _generatePairId(base, quote);
         require(pairs[pairId].tokenz[0] == address(0), "Pair exists");
-        uint256 decimalsBase = IERC20(base).decimals();
-        uint256 decimalsQuote = IERC20(quote).decimals();
+        uint256 decimalsBase = IERC20Metadata(base).decimals();
+        uint256 decimalsQuote = IERC20Metadata(quote).decimals();
         require(decimalsBase >= 6, "Base token decimals must be at least 6");
         require(decimalsQuote >= 6, "Quote token decimals must be at least 6");
         pairs[pairId] = Pair({
@@ -384,15 +387,19 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             uint256 truncatedMakerNet = _truncateToMinimumDecimals(makerNet);
 
             // 残高更新（切り捨て後の金額を使用）
+            uint8 baseDecimals = IERC20Metadata(incoming.base).decimals();
+            uint8 quoteDecimals = IERC20Metadata(incoming.quote).decimals();
+            uint256 scaledTakerNet = (truncatedTakerNet * (10 ** (baseDecimals - MINIMUM_DECIMALS)));
+            uint256 scaledMakerNet = (truncatedMakerNet * (10 ** (quoteDecimals - MINIMUM_DECIMALS))) / PRICE_PRECISION_FACTOR;
             _tradingVault.creditBalance(
                 incoming.user,
                 incoming.base,
-                truncatedTakerNet
+                scaledTakerNet
             );
             _tradingVault.creditBalance(
                 sellOrder.user,
                 incoming.quote,
-                truncatedMakerNet
+                scaledMakerNet
             );
 
             // 手数料の収集（切り捨てなし）
@@ -501,15 +508,30 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             uint256 truncatedMakerNet = _truncateToMinimumDecimals(makerNet);
 
             // 残高更新（切り捨て後の金額を使用）
+            uint8 baseDecimals = IERC20Metadata(incoming.base).decimals();
+            uint8 quoteDecimals = IERC20Metadata(incoming.quote).decimals();
+            uint256 scaledTakerNet = (truncatedTakerNet * (10 ** (quoteDecimals - MINIMUM_DECIMALS))) / PRICE_PRECISION_FACTOR;
+            // console.log("truncatedTakerNet", truncatedTakerNet);
+            // console.log("scaledTakerNet", scaledTakerNet);
+            // console.log("PRICE_PRECISION_FACTOR", PRICE_PRECISION_FACTOR);
+            // console.log("quoteDecimals", quoteDecimals);
+            // console.log("MINIMUM_DECIMALS", MINIMUM_DECIMALS);
+            // console.log("baseDecimals", baseDecimals);
+            uint256 scaledMakerNet = (truncatedMakerNet ) * (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            // console.log("scaledMakerNet", scaledMakerNet);
+            // console.log("truncatedMakerNet", truncatedMakerNet);
+            // console.log("PRICE_PRECISION_FACTOR", PRICE_PRECISION_FACTOR);
+            // console.log("baseDecimals", baseDecimals);
+            // console.log("MINIMUM_DECIMALS", MINIMUM_DECIMALS);
             _tradingVault.creditBalance(
                 incoming.user,
                 incoming.quote,
-                truncatedTakerNet
-            );
+                scaledTakerNet
+            ); 
             _tradingVault.creditBalance(
                 buyOrder.user,
                 incoming.base,
-                truncatedMakerNet
+                scaledMakerNet
             );
 
             // 手数料の収集（切り捨てなし）
@@ -542,7 +564,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         if (order.price == 0 && remaining > 0) {
             uint256 refundAmount = 0;
             address refundToken = address(0);
-
             if (order.side == OrderSide.Buy) {
                 uint256 lockedAmount = _tradingVault.getLockedAmount(order.id);
                 refundAmount = (lockedAmount * remaining) / originalAmount;
@@ -551,22 +572,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 refundAmount = remaining;
                 refundToken = order.base;
             }
-
-            require(
-                refundAmount == 0 || refundToken != address(0),
-                "Invalid refund token"
-            );
-
+            require(refundAmount == 0 || refundToken != address(0), "Invalid refund token");
             if (refundAmount > 0) {
-                // 返金額も6桁精度に切り捨て
-                uint256 truncatedRefund = _truncateToMinimumDecimals(
-                    refundAmount
-                );
-                _tradingVault.creditBalance(
-                    order.user,
-                    refundToken,
-                    truncatedRefund
-                );
+                uint8 tokenDecimals = IERC20Metadata(refundToken).decimals();
+                uint256 scaledRefund = _truncateToMinimumDecimals(refundAmount) * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+                _tradingVault.creditBalance(order.user, refundToken, scaledRefund);
             }
         }
     }
@@ -708,9 +718,9 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < tokens.length; i++) {
             IERC20 t = IERC20(tokens[i]);
             results[i] = BaseInfoResult({
-                symbol: t.symbol(),
-                name: t.name(),
-                decimals: t.decimals(),
+                symbol: IERC20Metadata(tokens[i]).symbol(),
+                name: IERC20Metadata(tokens[i]).name(),
+                decimals: IERC20Metadata(tokens[i]).decimals(),
                 totalSupply: t.totalSupply()
             });
         }

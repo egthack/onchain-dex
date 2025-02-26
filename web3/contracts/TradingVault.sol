@@ -223,7 +223,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             } else {
                 refundToken = order.base;
                 tokenDecimals = IERC20Metadata(order.base).decimals();
-            }                
+            }
             uint256 refundAmount;
             if (order.side == IMatchingEngine.OrderSide.Buy) {
                 refundAmount =
@@ -292,6 +292,10 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 // Calculate scaledQuoteAmount using standard multiplication
                 uint256 scaledQuoteAmount = truncatedQuoteAmount *
                     (10 ** (quoteDecimals - MINIMUM_DECIMALS));
+                require(
+                    balances[req.user][req.quote] >= scaledQuoteAmount,
+                    "Insufficient quote balance"
+                );
                 balances[req.user][req.quote] -= scaledQuoteAmount;
 
                 return scaledQuoteAmount;
@@ -308,6 +312,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
 
             // 小数点以下6桁の精度に切り捨て
             truncatedBaseAmount = _truncateToMinimumDecimals(exactBaseAmount);
+
             // 追加: 切り捨て後が0ならオーダーを拒否する
             require(truncatedBaseAmount > 0, "Trade amount below minimum");
 
@@ -320,6 +325,10 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             // 残高から引く金額は切り捨てた値を使用（6桁→baseトークンのdecimals）
             uint256 scaledBaseAmount = truncatedBaseAmount *
                 (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            require(
+                balances[req.user][req.base] >= scaledBaseAmount,
+                "Insufficient base balance"
+            );
             balances[req.user][req.base] -= scaledBaseAmount;
 
             // 返り値（ロックした金額）はbaseトークンのdecimals精度の値
