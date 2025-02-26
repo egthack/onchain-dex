@@ -172,11 +172,16 @@ export default function TradingPage() {
         gas: BigInt(300000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash });
-      setTxHash(hash);
-      setModalOpen(true);
-      console.log("Deposit successful");
-      fetchDepositBalance();
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (Number(receipt.status) !== 1) {
+        setError("デポジットの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log("Deposit successful");
+        fetchDepositBalance();
+      }
     } catch (err: unknown) {
       console.error("Deposit failed", err);
       if (err instanceof Error) {
@@ -214,11 +219,16 @@ export default function TradingPage() {
         gas: BigInt(300000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      setTxHash(hashWithdraw);
-      setModalOpen(true);
-      console.log("Withdraw successful");
-      fetchDepositBalance();
+      const receiptWithdraw = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
+      if (Number(receiptWithdraw.status) !== 1) {
+        setError("引き出しの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hashWithdraw);
+        setModalOpen(true);
+        console.log("Withdraw successful");
+        fetchDepositBalance();
+      }
     } catch (err: unknown) {
       console.error("Withdraw failed", err);
       if (err instanceof Error) {
@@ -325,11 +335,16 @@ export default function TradingPage() {
         gas: BigInt(5000000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash });
-      setTxHash(hash);
-      setModalOpen(true);
-      console.log("Order placed successfully via TradingVault");
-      fetchDepositBalance();
+      const receiptOrder = await publicClient.waitForTransactionReceipt({ hash });
+      if (Number(receiptOrder.status) !== 1) {
+        setError("注文の実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log("Order placed successfully via TradingVault");
+        fetchDepositBalance();
+      }
     } catch (err: unknown) {
       console.error("Order failed", err);
       if (err instanceof Error) {
@@ -366,11 +381,17 @@ export default function TradingPage() {
         args: [VAULT_ADDRESS, amountBN],
         gas: BigInt(300000)
       });
-      await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      setTxHash(hashApprove);
-      setModalOpen(true);
-      console.log("Approve successful");
-      fetchDepositBalance();
+
+      const receiptApprove = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
+      if (Number(receiptApprove.status) !== 1) {
+        setError("Approveの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hashApprove);
+        setModalOpen(true);
+        console.log("Approve successful");
+        fetchDepositBalance();
+      }
     } catch (err: unknown) {
       console.error("Approve failed", err);
       if (err instanceof Error) {
@@ -407,11 +428,16 @@ export default function TradingPage() {
         gas: BigInt(300000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash });
-      setTxHash(hash);
-      setModalOpen(true);
-      console.log("USDC Deposit successful");
-      fetchDepositBalanceQuote();
+      const receiptDepositQuote = await publicClient.waitForTransactionReceipt({ hash });
+      if (Number(receiptDepositQuote.status) !== 1) {
+        setError("USDCデポジットの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log("USDC Deposit successful");
+        fetchDepositBalanceQuote();
+      }
     } catch (err: unknown) {
       console.error("USDC Deposit failed", err);
       if (err instanceof Error) {
@@ -448,11 +474,16 @@ export default function TradingPage() {
         gas: BigInt(300000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      setTxHash(hashWithdraw);
-      setModalOpen(true);
-      console.log("USDC Withdraw successful");
-      fetchDepositBalanceQuote();
+      const receiptWithdrawQuote = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
+      if (Number(receiptWithdrawQuote.status) !== 1) {
+        setError("USDC引き出しの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hashWithdraw);
+        setModalOpen(true);
+        console.log("USDC Withdraw successful");
+        fetchDepositBalanceQuote();
+      }
     } catch (err: unknown) {
       console.error("USDC Withdraw failed", err);
       if (err instanceof Error) {
@@ -488,11 +519,17 @@ export default function TradingPage() {
         args: [VAULT_ADDRESS, amountBN],
         gas: BigInt(300000)
       });
-      await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      setTxHash(hashApprove);
-      setModalOpen(true);
-      console.log("USDC Approve successful");
-      fetchDepositBalanceQuote();
+
+      const receiptApproveQuote = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
+      if (Number(receiptApproveQuote.status) !== 1) {
+        setError("USDC Approveの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hashApprove);
+        setModalOpen(true);
+        console.log("USDC Approve successful");
+        fetchDepositBalanceQuote();
+      }
     } catch (err: unknown) {
       console.error("USDC Approve failed", err);
       if (err instanceof Error) {
@@ -526,10 +563,15 @@ export default function TradingPage() {
         gas: BigInt(300000)
       });
 
-      await publicClient.waitForTransactionReceipt({ hash });
-      setTxHash(hash);
-      setModalOpen(true);
-      console.log("Cancel order successful");
+      const receiptCancel = await publicClient.waitForTransactionReceipt({ hash });
+      if (Number(receiptCancel.status) !== 1) {
+        setError("注文キャンセルの実行に失敗しました");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log("Cancel order successful");
+      }
     } catch (err: unknown) {
       console.error("Cancel order failed", err);
       if (err instanceof Error) {
@@ -948,21 +990,33 @@ export default function TradingPage() {
       {modalOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
           <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
-            <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
-            <p className="break-all mb-3">
-              Tx Hash: <a
-                href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent-green underline"
-              >
-                {txHash}
-              </a>
-            </p>
+            {error ? (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Failed</h3>
+                <p className="break-all mb-3">{error}</p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
+                <p className="break-all mb-3">
+                  Tx Hash: <a
+                    href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-green underline"
+                  >
+                    {txHash}
+                  </a>
+                </p>
+              </>
+            )}
             <div className="flex justify-center">
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={() => {
+                  setModalOpen(false);
+                  setError("");
+                }}
                 className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
               >
                 Close
