@@ -173,10 +173,11 @@ export default function TradingPage() {
       });
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (Number(receipt.status) !== 1) {
+      if (receipt.status !== "success") {
         setError("デポジットの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hash);
         setModalOpen(true);
         console.log("Deposit successful");
@@ -220,10 +221,11 @@ export default function TradingPage() {
       });
 
       const receiptWithdraw = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      if (Number(receiptWithdraw.status) !== 1) {
+      if (receiptWithdraw.status !== "success") {
         setError("引き出しの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hashWithdraw);
         setModalOpen(true);
         console.log("Withdraw successful");
@@ -324,8 +326,6 @@ export default function TradingPage() {
         signature: signature
       };
 
-      console.log(tradeRequest);
-
       // TradingVault経由で注文を実行
       const hash = await walletClient.writeContract({
         address: VAULT_ADDRESS,
@@ -336,10 +336,11 @@ export default function TradingPage() {
       });
 
       const receiptOrder = await publicClient.waitForTransactionReceipt({ hash });
-      if (Number(receiptOrder.status) !== 1) {
+      if (receiptOrder.status !== "success") {
         setError("注文の実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hash);
         setModalOpen(true);
         console.log("Order placed successfully via TradingVault");
@@ -383,10 +384,11 @@ export default function TradingPage() {
       });
 
       const receiptApprove = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      if (Number(receiptApprove.status) !== 1) {
+      if (receiptApprove.status !== "success") {
         setError("Approveの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hashApprove);
         setModalOpen(true);
         console.log("Approve successful");
@@ -429,10 +431,11 @@ export default function TradingPage() {
       });
 
       const receiptDepositQuote = await publicClient.waitForTransactionReceipt({ hash });
-      if (Number(receiptDepositQuote.status) !== 1) {
+      if (receiptDepositQuote.status !== "success") {
         setError("USDCデポジットの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hash);
         setModalOpen(true);
         console.log("USDC Deposit successful");
@@ -475,10 +478,11 @@ export default function TradingPage() {
       });
 
       const receiptWithdrawQuote = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      if (Number(receiptWithdrawQuote.status) !== 1) {
+      if (receiptWithdrawQuote.status !== "success") {
         setError("USDC引き出しの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hashWithdraw);
         setModalOpen(true);
         console.log("USDC Withdraw successful");
@@ -521,10 +525,11 @@ export default function TradingPage() {
       });
 
       const receiptApproveQuote = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      if (Number(receiptApproveQuote.status) !== 1) {
+      if (receiptApproveQuote.status !== "success") {
         setError("USDC Approveの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hashApprove);
         setModalOpen(true);
         console.log("USDC Approve successful");
@@ -564,10 +569,11 @@ export default function TradingPage() {
       });
 
       const receiptCancel = await publicClient.waitForTransactionReceipt({ hash });
-      if (Number(receiptCancel.status) !== 1) {
+      if (receiptCancel.status !== "success") {
         setError("注文キャンセルの実行に失敗しました");
         setModalOpen(true);
       } else {
+        setError("");
         setTxHash(hash);
         setModalOpen(true);
         console.log("Cancel order successful");
@@ -675,38 +681,36 @@ export default function TradingPage() {
           <div className="space-y-3">
             {orderType === "market" ? (
               <div className="space-y-3">
-                <div>
-                  <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                    Amount ({selectedPair.base})
-                  </label>
-                  <input
-                    id="market-amount-input"
-                    type="number"
-                    className="trading-input"
-                    placeholder="0.00"
-                    value={marketAmount}
-                    onChange={(e) => setMarketAmount(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="market-price-input" className="block text-xs font-medium text-gray-400 mb-1">
-                    Price ({selectedPair.quote})
-                  </label>
-                  <input
-                    id="market-price-input"
-                    type="number"
-                    className="trading-input"
-                    placeholder="0.00"
-                    value={marketPrice}
-                    onChange={(e) => setMarketPrice(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="market-price-input" className="block text-xs font-medium text-gray-400 mb-1">
+                      Price ({selectedPair.quote})
+                    </label>
+                    <input
+                      id="market-price-input"
+                      type="number"
+                      className="trading-input"
+                      placeholder="0.00"
+                      value={marketPrice}
+                      onChange={(e) => setMarketPrice(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
+                      Amount ({selectedPair.base})
+                    </label>
+                    <input
+                      id="market-amount-input"
+                      type="number"
+                      className="trading-input"
+                      placeholder="0.00"
+                      value={marketAmount}
+                      onChange={(e) => setMarketAmount(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="text-xs text-gray-400">
                   Estimated Total: <span className="text-white">0.00 {selectedPair.quote}</span>
-                </div>
-                <div className="invisible">
-                  <span className="block text-xs font-medium text-gray-400 mb-1">Hidden Spacer</span>
-                  <div className="h-[38px]" />
                 </div>
               </div>
             ) : (
@@ -740,7 +744,7 @@ export default function TradingPage() {
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Total: <span className="text-white">0.00 {selectedPair.quote}</span>
+                  Estimated Total: <span className="text-white">0.00 {selectedPair.quote}</span>
                 </div>
               </div>
             )}
@@ -755,8 +759,6 @@ export default function TradingPage() {
                 >
                   {isLoading ? "処理中..." : "Place Order"}
                 </button>
-                {txHash && <p className="mt-2 text-xs text-white">トランザクションハッシュ: {txHash}</p>}
-                {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
               </>
             ) : (
               <button
