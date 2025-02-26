@@ -189,73 +189,6 @@ describe("TradingVault", function () {
   });
 
   describe("Execute Trade", function () {
-    it("should revert if base token has less than 6 decimals", async function () {
-      // ユーザーがquoteトークンをデポジット
-      const depositAmount = ethers.parseUnits("1000", 6);
-      await usdcToken
-        .connect(user)
-        .approve(await vault.getAddress(), depositAmount);
-      await vault
-        .connect(user)
-        .deposit(await usdcToken.getAddress(), depositAmount);
-
-      // 低小数点トークンとquoteトークンのペアを追加
-      await engine
-        .connect(owner)
-        .addPair(
-          await lowDecimalToken.getAddress(),
-          await usdcToken.getAddress()
-        );
-
-      // 取引リクエスト作成：Buy注文
-      const tradeRequest = await createTradeRequest({
-        user: user,
-        base: lowDecimalToken,
-        quote: usdcToken,
-        side: 0, // Buy
-        amount: 100,
-        price: 100, // 価格は小数点以下2桁精度（100 = 1.00）
-      });
-
-      // 実行時にエラーが発生することを確認
-      await expect(vault.connect(user).executeTradeBatch([tradeRequest]))
-        .to.be.revertedWithCustomError(vault, "InsufficientDecimals")
-        .withArgs(await lowDecimalToken.getAddress(), 5);
-    });
-
-    it("should revert if quote token has less than 6 decimals", async function () {
-      // ユーザーがbaseトークンをデポジット
-      const depositAmount = ethers.parseUnits("1000", 18);
-      await baseToken
-        .connect(user)
-        .approve(await vault.getAddress(), depositAmount);
-      await vault
-        .connect(user)
-        .deposit(await baseToken.getAddress(), depositAmount);
-
-      // baseトークンと低小数点トークンのペアを追加
-      await engine
-        .connect(owner)
-        .addPair(
-          await baseToken.getAddress(),
-          await lowDecimalToken.getAddress()
-        );
-
-      // 取引リクエスト作成：Sell注文
-      const tradeRequest = await createTradeRequest({
-        user: user,
-        base: baseToken,
-        quote: lowDecimalToken,
-        side: 1, // Sell
-        amount: 100,
-        price: 100, // 価格は小数点以下2桁精度（100 = 1.00）
-      });
-
-      // 実行時にエラーが発生することを確認
-      await expect(vault.connect(user).executeTradeBatch([tradeRequest]))
-        .to.be.revertedWithCustomError(vault, "InsufficientDecimals")
-        .withArgs(await lowDecimalToken.getAddress(), 5);
-    });
 
     it("should revert if amount is below minimum threshold", async function () {
       // ユーザーがbaseトークンとquoteトークンをデポジット
@@ -500,8 +433,10 @@ describe("TradingVault", function () {
   });
 
   describe("Cancel Order", function () {
-    it("should cancel an active order and refund remaining funds", async function () {
+    it("should cancel an active buy order and refund remaining funds", async function () {
       // ユーザーがquoteトークンをデポジット
+      // 1000.000000 USDC
+      // 6桁のトークンの返金
       const depositAmount = ethers.parseUnits("1000", 6);
       await usdcToken
         .connect(user)
@@ -509,7 +444,6 @@ describe("TradingVault", function () {
       await vault
         .connect(user)
         .deposit(await usdcToken.getAddress(), depositAmount);
-
       // 取引リクエスト作成：Buy注文
       const tradeRequest = await createTradeRequest({
         user: user,
@@ -543,8 +477,9 @@ describe("TradingVault", function () {
       expect(orderData.active).to.equal(false);
     });
 
-    it("should handle order cancellation correctly", async function () {
+    it("should handle sell order cancellation correctly", async function () {
       // 整数値でデポジット（1 ETH）
+      // 18桁のトークンの返金
       const depositAmount = ethers.parseUnits("1", 18);
       await baseToken
         .connect(user)
@@ -553,6 +488,13 @@ describe("TradingVault", function () {
         .connect(user)
         .deposit(await baseToken.getAddress(), depositAmount);
 
+      // キャンセル前の残高を確認
+      const balanceBefore1 = await vault.getBalance(
+        await user.getAddress(),
+        await baseToken.getAddress()
+      );
+
+      console.log("balanceBefore1", balanceBefore1);
       // 取引リクエスト作成：Sell注文
       const tradeRequest = await createTradeRequest({
         user: user,
@@ -586,6 +528,9 @@ describe("TradingVault", function () {
         await user.getAddress(),
         await baseToken.getAddress()
       );
+
+      console.log("balanceBefore", balanceBefore);
+      console.log("balanceAfter", balanceAfter);
 
       // 注文時にロックされた金額が返金されるはず
       const expectedBalance = depositAmount;

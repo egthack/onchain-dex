@@ -215,12 +215,29 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
 
         // 3. Refund the remaining order amount (order.amount) to the user's vault balance
         if (order.amount > 0) {
-            // トークンのdecimalsを取得
-            uint8 baseDecimals = IERC20Metadata(order.base).decimals();
-            // order.amountは6桁精度なので、トークンのdecimals精度に変換
-            uint256 refundAmount = order.amount *
-                (10 ** (baseDecimals - MINIMUM_DECIMALS));
-            balances[msg.sender][order.base] += refundAmount;
+            address refundToken;
+            uint8 tokenDecimals;
+            if (order.side == IMatchingEngine.OrderSide.Buy) {
+                refundToken = order.quote;
+                tokenDecimals = IERC20Metadata(order.quote).decimals();
+            } else {
+                refundToken = order.base;
+                tokenDecimals = IERC20Metadata(order.base).decimals();
+            }                
+            uint256 refundAmount;
+            if (order.side == IMatchingEngine.OrderSide.Buy) {
+                refundAmount =
+                    (order.amount *
+                        (10 ** (tokenDecimals - MINIMUM_DECIMALS))) /
+                    100;
+            } else {
+                refundAmount =
+                    order.amount *
+                    (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+            }
+
+            order.amount * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+            balances[msg.sender][refundToken] += refundAmount;
         }
 
         emit OrderCancelled(orderId, msg.sender);
@@ -249,17 +266,20 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 bytes32 pairId = engine.getPairId(req.base, req.quote);
                 uint256 bestSellPrice = engine.getBestSellPrice(pairId);
                 require(bestSellPrice > 0, "No sell orders available");
-                // ロックは指定された数量で
-                exactQuoteAmount = req.amount;
             } else {
                 // amount(6桁) * price(2桁) / 100 = 6桁
                 // Simply use safe math; overflow checks are performed by Solidity 0.8
                 exactQuoteAmount = req.amount * req.price;
-                require(exactQuoteAmount >= MINIMUM_AMOUNT * 100, "Quote amount below minimum threshold");
+                require(
+                    exactQuoteAmount >= MINIMUM_AMOUNT * 100,
+                    "Quote amount below minimum threshold"
+                );
                 exactQuoteAmount = exactQuoteAmount / 100;
 
                 // 新たに6桁精度に切り捨てる
-                truncatedQuoteAmount = _truncateToMinimumDecimals(exactQuoteAmount);
+                truncatedQuoteAmount = _truncateToMinimumDecimals(
+                    exactQuoteAmount
+                );
                 // 追加: 切り捨て後が0ならオーダーを拒否する
                 require(truncatedQuoteAmount > 0, "Trade amount below minimum");
 
@@ -270,7 +290,8 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 );
 
                 // Calculate scaledQuoteAmount using standard multiplication
-                uint256 scaledQuoteAmount = truncatedQuoteAmount * (10 ** (quoteDecimals - MINIMUM_DECIMALS));
+                uint256 scaledQuoteAmount = truncatedQuoteAmount *
+                    (10 ** (quoteDecimals - MINIMUM_DECIMALS));
                 balances[req.user][req.quote] -= scaledQuoteAmount;
 
                 return scaledQuoteAmount;
@@ -297,7 +318,8 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             );
 
             // 残高から引く金額は切り捨てた値を使用（6桁→baseトークンのdecimals）
-            uint256 scaledBaseAmount = truncatedBaseAmount * (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            uint256 scaledBaseAmount = truncatedBaseAmount *
+                (10 ** (baseDecimals - MINIMUM_DECIMALS));
             balances[req.user][req.base] -= scaledBaseAmount;
 
             // 返り値（ロックした金額）はbaseトークンのdecimals精度の値
