@@ -49,14 +49,10 @@ export default function TradingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [depositAmount, setDepositAmount] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
   const [marketPrice, setMarketPrice] = useState("");
 
   const [depositBalance, setDepositBalance] = useState<bigint>(BigInt(0));
 
-  const [depositAmountQuote, setDepositAmountQuote] = useState("");
-  const [withdrawAmountQuote, setWithdrawAmountQuote] = useState("");
   const [depositBalanceQuote, setDepositBalanceQuote] = useState<bigint>(BigInt(0));
 
   const [cancelOrderId, setCancelOrderId] = useState("");
@@ -151,102 +147,6 @@ export default function TradingPage() {
   useEffect(() => {
     fetchDepositBalanceQuote();
   }, [fetchDepositBalanceQuote]);
-
-  async function handleDeposit() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES[selectedPair.base as keyof typeof TOKEN_ADDRESSES] as unknown as `0x${string}`;
-      const decimals = getTokenDecimals(selectedPair.base);
-      const amountBN = convertToTokenUnits(depositAmount, decimals);
-
-      // Vaultへのデポジット処理を実行
-      const hash = await walletClient.writeContract({
-        address: VAULT_ADDRESS,
-        abi: vaultAbi,
-        functionName: 'deposit',
-        args: [tokenAddress, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status !== "success") {
-        setError("デポジットの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hash);
-        setModalOpen(true);
-        console.log("Deposit successful");
-        fetchDepositBalance();
-      }
-    } catch (err: unknown) {
-      console.error("Deposit failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("デポジットに失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleWithdraw() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES[selectedPair.base as keyof typeof TOKEN_ADDRESSES] as unknown as `0x${string}`;
-      const decimals = getTokenDecimals(selectedPair.base);
-      const amountBN = convertToTokenUnits(withdrawAmount, decimals);
-
-      // Vaultからの引き出し処理を実行
-      const hashWithdraw = await walletClient.writeContract({
-        address: VAULT_ADDRESS,
-        abi: vaultAbi,
-        functionName: 'withdraw',
-        args: [tokenAddress, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptWithdraw = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      if (receiptWithdraw.status !== "success") {
-        setError("引き出しの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hashWithdraw);
-        setModalOpen(true);
-        console.log("Withdraw successful");
-        fetchDepositBalance();
-      }
-    } catch (err: unknown) {
-      console.error("Withdraw failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("引き出しに失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
 
   async function handlePlaceOrder() {
     setError("");
@@ -357,195 +257,6 @@ export default function TradingPage() {
         setError(err.message);
       } else {
         setError("注文に失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleApprove() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES[selectedPair.base as keyof typeof TOKEN_ADDRESSES] as unknown as `0x${string}`;
-      const decimals = getTokenDecimals(selectedPair.base);
-      // depositAmountが設定されていない場合は十分な大きさの値（例: 1000000）を使用
-      const approveAmount = (depositAmount && depositAmount !== "0") ? depositAmount : "1000000";
-      const amountBN = convertToTokenUnits(approveAmount, decimals);
-      const hashApprove = await walletClient.writeContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [VAULT_ADDRESS, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptApprove = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      if (receiptApprove.status !== "success") {
-        setError("Approveの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hashApprove);
-        setModalOpen(true);
-        console.log("Approve successful");
-        fetchDepositBalance();
-      }
-    } catch (err: unknown) {
-      console.error("Approve failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Approveに失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleDepositQuote() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES.USDC as unknown as `0x${string}`;
-      const decimals = getTokenDecimals("USDC");
-      const amountBN = convertToTokenUnits(depositAmountQuote, decimals);
-
-      const hash = await walletClient.writeContract({
-        address: VAULT_ADDRESS,
-        abi: vaultAbi,
-        functionName: 'deposit',
-        args: [tokenAddress, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptDepositQuote = await publicClient.waitForTransactionReceipt({ hash });
-      if (receiptDepositQuote.status !== "success") {
-        setError("USDCデポジットの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hash);
-        setModalOpen(true);
-        console.log("USDC Deposit successful");
-        fetchDepositBalanceQuote();
-      }
-    } catch (err: unknown) {
-      console.error("USDC Deposit failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("USDCのデポジットに失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleWithdrawQuote() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES.USDC as unknown as `0x${string}`;
-      const decimals = getTokenDecimals("USDC");
-      const amountBN = convertToTokenUnits(withdrawAmountQuote, decimals);
-
-      const hashWithdraw = await walletClient.writeContract({
-        address: VAULT_ADDRESS,
-        abi: vaultAbi,
-        functionName: 'withdraw',
-        args: [tokenAddress, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptWithdrawQuote = await publicClient.waitForTransactionReceipt({ hash: hashWithdraw });
-      if (receiptWithdrawQuote.status !== "success") {
-        setError("USDC引き出しの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hashWithdraw);
-        setModalOpen(true);
-        console.log("USDC Withdraw successful");
-        fetchDepositBalanceQuote();
-      }
-    } catch (err: unknown) {
-      console.error("USDC Withdraw failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("USDCの引き出しに失敗しました");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleApproveQuote() {
-    setError("");
-    if (!walletClient) {
-      setError("ウォレットが接続されていません");
-      return;
-    }
-    if (!publicClient) {
-      setError("パブリッククライアントが利用できません");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const tokenAddress = TOKEN_ADDRESSES.USDC as unknown as `0x${string}`;
-      const decimals = getTokenDecimals("USDC");
-      const approveAmount = (depositAmountQuote && depositAmountQuote !== "0") ? depositAmountQuote : "1000000";
-      const amountBN = convertToTokenUnits(approveAmount, decimals);
-      const hashApprove = await walletClient.writeContract({
-        address: tokenAddress,
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [VAULT_ADDRESS, amountBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptApproveQuote = await publicClient.waitForTransactionReceipt({ hash: hashApprove });
-      if (receiptApproveQuote.status !== "success") {
-        setError("USDC Approveの実行に失敗しました");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hashApprove);
-        setModalOpen(true);
-        console.log("USDC Approve successful");
-        fetchDepositBalanceQuote();
-      }
-    } catch (err: unknown) {
-      console.error("USDC Approve failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("USDCのApproveに失敗しました");
       }
     } finally {
       setIsLoading(false);
@@ -735,7 +446,9 @@ export default function TradingPage() {
                   </div>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Estimated Total: <span className="text-white">0.00 {selectedPair.quote}</span>
+                  Estimated Total: <span className="text-white">
+                    {marketAmount && marketPrice ? (Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -767,7 +480,7 @@ export default function TradingPage() {
                   <div>
                     <label htmlFor="limit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
                       Amount ({selectedPair.base})
-                    </label>8
+                    </label>
                     <input
                       id="limit-amount-input"
                       type="number"
@@ -796,6 +509,9 @@ export default function TradingPage() {
 
             {isConnected ? (
               <>
+                <div className="text-sm text-white mb-2">
+                  利用可能な預け入れ残高: {side === 'buy' ? formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")) : formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base))} {side === 'buy' ? "USDC" : selectedPair.base}
+                </div>
                 <button
                   type="button"
                   onClick={handlePlaceOrder}
@@ -813,128 +529,6 @@ export default function TradingPage() {
                 Connect Wallet to Trade
               </button>
             )}
-          </div>
-        </div>
-
-        {/* Deposit/Withdraw Form */}
-        <div className="bg-trading-gray rounded-lg p-3 mt-3">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Deposit/Withdraw</h2>
-          <div className="text-sm text-white mb-2">
-            現在の預け入れ残高: {formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base))} {selectedPair.base}
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="deposit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                Deposit Amount ({selectedPair.base})
-              </label>
-              <input
-                id="deposit-amount-input"
-                type="number"
-                className="trading-input"
-                placeholder="0.00"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                onClick={handleDeposit}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Deposit"}
-              </button>
-            </div>
-            <div>
-              <label htmlFor="withdraw-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                Withdraw Amount ({selectedPair.base})
-              </label>
-              <input
-                id="withdraw-amount-input"
-                type="number"
-                className="trading-input"
-                placeholder="0.00"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={handleWithdraw}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Withdraw"}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* USDC Deposit/Withdraw Form */}
-        <div className="bg-trading-gray rounded-lg p-3 mt-3">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">USDC Deposit/Withdraw</h2>
-          <div className="text-sm text-white mb-2">
-            現在のUSDC預け入れ残高: {formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC"))} USDC
-          </div>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="deposit-quote-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                Deposit Amount (USDC)
-              </label>
-              <input
-                id="deposit-quote-amount-input"
-                type="number"
-                step="any"
-                className="trading-input"
-                placeholder="0.00"
-                value={depositAmountQuote}
-                onChange={(e) => setDepositAmountQuote(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={handleApproveQuote}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Approve"}
-              </button>
-              <button
-                type="button"
-                onClick={handleDepositQuote}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Deposit"}
-              </button>
-            </div>
-            <div>
-              <label htmlFor="withdraw-quote-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                Withdraw Amount (USDC)
-              </label>
-              <input
-                id="withdraw-quote-amount-input"
-                type="number"
-                step="any"
-                className="trading-input"
-                placeholder="0.00"
-                value={withdrawAmountQuote}
-                onChange={(e) => setWithdrawAmountQuote(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={handleWithdrawQuote}
-                disabled={isLoading}
-                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "処理中..." : "Withdraw"}
-              </button>
-            </div>
           </div>
         </div>
 
