@@ -47,6 +47,7 @@ export default function Navigation({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="flex gap-3 items-center">
+            <Link href="/deposit" className="bg-accent-green text-black px-3 py-1.5 rounded-md shadow transition-colors">Deposit</Link>
             <ConnectButton />
           </div>
         </nav>
