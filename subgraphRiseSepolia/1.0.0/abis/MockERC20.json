@@ -15,6 +15,11 @@
         "internalType": "uint256",
         "name": "initialSupply",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint8",
+        "name": "decimals_",
+        "type": "uint8"
       }
     ],
     "stateMutability": "nonpayable",

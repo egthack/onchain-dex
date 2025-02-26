@@ -38,6 +38,11 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -191,6 +196,37 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "bytes32",
+        "name": "pairId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "base",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "quote",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "PairRemoved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint256",
         "name": "makerOrderId",
         "type": "uint256"
@@ -242,6 +278,19 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "vault",
+        "type": "address"
+      }
+    ],
+    "name": "VaultAddressUpdated",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "_tradingVault",
     "outputs": [
@@ -265,16 +314,6 @@
         "internalType": "address",
         "name": "quote",
         "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "decimalsBase",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "decimalsQuote",
-        "type": "uint256"
       }
     ],
     "name": "addPair",
@@ -312,6 +351,47 @@
       }
     ],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address[]",
+        "name": "tokens",
+        "type": "address[]"
+      }
+    ],
+    "name": "getBaseInfo",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "symbol",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "internalType": "uint8",
+            "name": "decimals",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "totalSupply",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct IMatchingEngine.BaseInfoResult[]",
+        "name": "results",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -391,7 +471,7 @@
             "type": "uint256"
           }
         ],
-        "internalType": "struct MatchingEngine.BestOrderResult",
+        "internalType": "struct IMatchingEngine.BestOrderResult",
         "name": "orderResult",
         "type": "tuple"
       }
@@ -503,63 +583,90 @@
       },
       {
         "internalType": "uint256",
-        "name": "count",
+        "name": "startPrice",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "startPrice",
+        "name": "limit",
         "type": "uint256"
       }
     ],
-    "name": "getOrders",
+    "name": "getOrdersWithPagination",
     "outputs": [
       {
         "components": [
           {
+            "components": [
+              {
+                "internalType": "uint256",
+                "name": "id",
+                "type": "uint256"
+              },
+              {
+                "internalType": "address",
+                "name": "user",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "base",
+                "type": "address"
+              },
+              {
+                "internalType": "address",
+                "name": "quote",
+                "type": "address"
+              },
+              {
+                "internalType": "uint256",
+                "name": "price",
+                "type": "uint256"
+              },
+              {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+              },
+              {
+                "internalType": "enum IMatchingEngine.OrderSide",
+                "name": "side",
+                "type": "uint8"
+              },
+              {
+                "internalType": "uint256",
+                "name": "timestamp",
+                "type": "uint256"
+              },
+              {
+                "internalType": "bool",
+                "name": "active",
+                "type": "bool"
+              },
+              {
+                "internalType": "uint256",
+                "name": "next",
+                "type": "uint256"
+              }
+            ],
+            "internalType": "struct IMatchingEngine.Order[]",
+            "name": "orders",
+            "type": "tuple[]"
+          },
+          {
             "internalType": "uint256",
-            "name": "price",
+            "name": "nextPrice",
             "type": "uint256"
           },
           {
             "internalType": "uint256",
-            "name": "orderId",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "nextOrderId",
-            "type": "uint256"
-          },
-          {
-            "internalType": "address",
-            "name": "maker",
-            "type": "address"
-          },
-          {
-            "internalType": "uint256",
-            "name": "expiry",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "tokens",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "availableBase",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "availableQuote",
+            "name": "totalCount",
             "type": "uint256"
           }
         ],
-        "internalType": "struct MatchingEngine.OrderResult[]",
-        "name": "orderResults",
-        "type": "tuple[]"
+        "internalType": "struct IMatchingEngine.OrderPage",
+        "name": "",
+        "type": "tuple"
       }
     ],
     "stateMutability": "view",
@@ -635,7 +742,7 @@
                 "type": "uint256"
               }
             ],
-            "internalType": "struct MatchingEngine.BestOrderResult",
+            "internalType": "struct IMatchingEngine.BestOrderResult",
             "name": "bestBuyOrder",
             "type": "tuple"
           },
@@ -682,12 +789,12 @@
                 "type": "uint256"
               }
             ],
-            "internalType": "struct MatchingEngine.BestOrderResult",
+            "internalType": "struct IMatchingEngine.BestOrderResult",
             "name": "bestSellOrder",
             "type": "tuple"
           }
         ],
-        "internalType": "struct MatchingEngine.PairResult",
+        "internalType": "struct IMatchingEngine.PairResult",
         "name": "pairResult",
         "type": "tuple"
       }
@@ -716,23 +823,23 @@
         "type": "bytes32"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "count",
+        "name": "offset",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "offset",
+        "name": "limit",
         "type": "uint256"
       }
     ],
-    "name": "getPairs",
+    "name": "getPairsWithPagination",
     "outputs": [
       {
         "components": [
@@ -794,7 +901,7 @@
                 "type": "uint256"
               }
             ],
-            "internalType": "struct MatchingEngine.BestOrderResult",
+            "internalType": "struct IMatchingEngine.BestOrderResult",
             "name": "bestBuyOrder",
             "type": "tuple"
           },
@@ -841,54 +948,13 @@
                 "type": "uint256"
               }
             ],
-            "internalType": "struct MatchingEngine.BestOrderResult",
+            "internalType": "struct IMatchingEngine.BestOrderResult",
             "name": "bestSellOrder",
             "type": "tuple"
           }
         ],
-        "internalType": "struct MatchingEngine.PairResult[]",
+        "internalType": "struct IMatchingEngine.PairResult[]",
         "name": "pairResults",
-        "type": "tuple[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address[]",
-        "name": "tokens",
-        "type": "address[]"
-      }
-    ],
-    "name": "getbasefo",
-    "outputs": [
-      {
-        "components": [
-          {
-            "internalType": "string",
-            "name": "symbol",
-            "type": "string"
-          },
-          {
-            "internalType": "string",
-            "name": "name",
-            "type": "string"
-          },
-          {
-            "internalType": "uint8",
-            "name": "decimals",
-            "type": "uint8"
-          },
-          {
-            "internalType": "uint256",
-            "name": "totalSupply",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct MatchingEngine.basefoResult[]",
-        "name": "results",
         "type": "tuple[]"
       }
     ],
@@ -908,7 +974,7 @@
         "type": "address[]"
       }
     ],
-    "name": "getquotebaseTokenlanceAndAllowance",
+    "name": "getTokenBalanceAndAllowance",
     "outputs": [
       {
         "components": [
@@ -923,7 +989,7 @@
             "type": "uint256"
           }
         ],
-        "internalType": "struct MatchingEngine.quotebaseTokenlanceAndAllowanceResult[]",
+        "internalType": "struct IMatchingEngine.TokenBalanceAndAllowanceResult[]",
         "name": "results",
         "type": "tuple[]"
       }
@@ -1066,6 +1132,19 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "pairId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "removePair",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "renounceOwnership",
     "outputs": [],
@@ -1076,12 +1155,12 @@
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "_makerFeeRate",
+        "name": "newMakerFeeRate",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "_takerFeeRate",
+        "name": "newTakerFeeRate",
         "type": "uint256"
       }
     ],
@@ -1094,7 +1173,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_vault",
+        "name": "newVault",
         "type": "address"
       }
     ],

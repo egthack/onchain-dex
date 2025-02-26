@@ -7,9 +7,9 @@ dataSources:
     name: TradingVault
     network: rise-sepolia
     source:
-      address: '0xeAd3a036033F00d2B5c3B96E10783A6eb11B2c28'
+      address: '0x9e6903fD8e1CE05feE745B0211E5CeD3C0ab60A0'
       abi: TradingVault
-      startBlock: 5136615
+      startBlock: 5354957
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
@@ -36,9 +36,9 @@ dataSources:
     name: MatchingEngine
     network: rise-sepolia
     source:
-      address: '0xeAd3a036033F00d2B5c3B96E10783A6eb11B2c28'
+      address: '0x5cDB3B09842f2B240e8328FccfA73C0e1eE6d3E2'
       abi: MatchingEngine
-      startBlock: 5136615
+      startBlock: 5354957
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.6
