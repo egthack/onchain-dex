@@ -219,7 +219,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid pair"
         );
 
-        uint256 finalPrice = price;
+        uint256 orderPrice = price;
 
         uint256 orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -227,7 +227,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             user: user,
             base: base,
             quote: quote,
-            price: finalPrice,
+            price: orderPrice,
             amount: amount,
             side: side,
             timestamp: block.timestamp,
@@ -237,14 +237,14 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
-            ob.buyOrdersAtPrice[finalPrice].push(orderId);
-            if (!ob.buyTree.exists(finalPrice)) {
-                ob.buyTree.insert(finalPrice);
+            ob.buyOrdersAtPrice[orderPrice].push(orderId);
+            if (!ob.buyTree.exists(orderPrice)) {
+                ob.buyTree.insert(orderPrice);
             }
         } else {
-            ob.sellOrdersAtPrice[finalPrice].push(orderId);
-            if (!ob.sellTree.exists(finalPrice)) {
-                ob.sellTree.insert(finalPrice);
+            ob.sellOrdersAtPrice[orderPrice].push(orderId);
+            if (!ob.sellTree.exists(orderPrice)) {
+                ob.sellTree.insert(orderPrice);
             }
         }
         emit OrderPlaced(
@@ -253,7 +253,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             side,
             base,
             quote,
-            finalPrice,
+            orderPrice,
             amount
         );
         return orderId;

@@ -489,12 +489,12 @@ describe("TradingVault", function () {
         .deposit(await baseToken.getAddress(), depositAmount);
 
       // キャンセル前の残高を確認
-      const balanceBefore1 = await vault.getBalance(
-        await user.getAddress(),
-        await baseToken.getAddress()
-      );
+      // const balanceBefore1 = await vault.getBalance(
+      //   await user.getAddress(),
+      //   await baseToken.getAddress()
+      // );
 
-      console.log("balanceBefore1", balanceBefore1);
+      // console.log("balanceBefore1", balanceBefore1);
       // 取引リクエスト作成：Sell注文
       const tradeRequest = await createTradeRequest({
         user: user,
@@ -529,8 +529,8 @@ describe("TradingVault", function () {
         await baseToken.getAddress()
       );
 
-      console.log("balanceBefore", balanceBefore);
-      console.log("balanceAfter", balanceAfter);
+      // console.log("balanceBefore", balanceBefore);
+      // console.log("balanceAfter", balanceAfter);
 
       // 注文時にロックされた金額が返金されるはず
       const expectedBalance = depositAmount;

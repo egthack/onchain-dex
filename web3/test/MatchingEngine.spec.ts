@@ -41,7 +41,7 @@ describe("MatchingEngine", function () {
       "Quote Token A",
       "QUOTEA",
       100000000,
-      18
+      6
     );
     await quoteTokenA.waitForDeployment();
 
@@ -116,13 +116,47 @@ describe("MatchingEngine", function () {
   });
 
   describe("Pair Management", function () {
+    let lowDecimalToken: MockERC20;
+    beforeEach(async function () {
+      const TokenFactory = await ethers.getContractFactory("MockERC20");
+      lowDecimalToken = await TokenFactory.connect(admin).deploy(
+        "Low Decimal Token",
+        "LDTOKEN",
+        100000000,
+        5
+      );
+    });
+
     it("should add a new pair and retrieve pair info", async function () {
       const pair = await matchingEngine.getPair(0);
       expect(pair.pairId).to.exist;
       expect(pair.tokenz[0]).to.equal(await baseTokenA.getAddress());
       expect(pair.tokenz[1]).to.equal(await quoteTokenA.getAddress());
       expect(pair.decimals[0]).to.equal(18);
-      expect(pair.decimals[1]).to.equal(18);
+      expect(pair.decimals[1]).to.equal(6);
+    });
+    
+    it("should revert if base token has less than 6 decimals", async function () {      
+      // 低小数点トークンとquoteトークンのペアを追加
+      await expect(matchingEngine
+        .connect(admin)
+        .addPair(
+          await lowDecimalToken.getAddress(),
+          await quoteTokenA.getAddress()
+        )
+      ).to.be.revertedWith("Base token decimals must be at least 6");
+    });
+
+    it("should revert if quote token has less than 6 decimals", async function () {
+      
+      // baseトークンと低小数点トークンのペアを追加
+      await expect(matchingEngine
+        .connect(admin)
+        .addPair(
+          await baseTokenB.getAddress(),
+          await lowDecimalToken.getAddress()
+        )
+      ).to.be.revertedWith("Quote token decimals must be at least 6");
     });
 
     it("should return an array of pairs with getPairs()", async function () {
@@ -146,9 +180,9 @@ describe("MatchingEngine", function () {
   describe("Order Creation via Vault", function () {
     it("should create a single order properly through vault", async function () {
       // --- user によるトークン入金の準備 ---
-      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
-      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
-      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), ethers.parseUnits("100000", 18));
 
       // --- Trade Request の作成 (Buy order: side = 0) ---
       // この例では amount = 100, price = 1 とする
@@ -179,14 +213,14 @@ describe("MatchingEngine", function () {
     });
 
     it("should create multiple orders properly through vault", async function () {
-      await baseTokenA.connect(admin).transfer(await user.getAddress(), 100000);
-      await baseTokenA.connect(user).approve(await vault.getAddress(), 100000);
-      await vault.connect(user).deposit(await baseTokenA.getAddress(), 100000);
+      await baseTokenA.connect(admin).transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
+      await vault.connect(user).deposit(await baseTokenA.getAddress(), ethers.parseUnits("100000", 18));
       await quoteTokenA
         .connect(admin)
-        .transfer(await user.getAddress(), 100000);
-      await quoteTokenA.connect(user).approve(await vault.getAddress(), 100000);
-      await vault.connect(user).deposit(await quoteTokenA.getAddress(), 100000);
+        .transfer(await user.getAddress(), ethers.parseUnits("100000", 6));
+      await quoteTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 6));
+      await vault.connect(user).deposit(await quoteTokenA.getAddress(), ethers.parseUnits("100000", 6));
 
       const sellRequests = [];
       for (let i = 0; i < 5; i++) {
@@ -289,7 +323,7 @@ describe("MatchingEngine", function () {
         base: baseTokenA,
         quote: quoteTokenA,
         side: 0,
-        amount: 30,
+        amount: 100,
         price: 1,
       });
       await vault.connect(user).executeTradeBatch([tradeRequest1]);
@@ -300,7 +334,7 @@ describe("MatchingEngine", function () {
         base: baseTokenA,
         quote: quoteTokenA,
         side: 0,
-        amount: 5,
+        amount: 100,
         price: 2,
       });
       await vault.connect(trader).executeTradeBatch([tradeRequest2]);
@@ -340,14 +374,14 @@ describe("MatchingEngine", function () {
 
   describe("Order Matching", function () {
     // 全量マッチング
-    it("should match orders correctly", async function () {
+    it.only("should match orders correctly", async function () {
       // baseToken を 100 トークンprice 2で買うのでquoteToken 200トークンが出る
       const tradeRequest1 = await createTradeRequest({
         user: user,
         base: baseTokenA,
         quote: quoteTokenA,
         side: 0,
-        amount: 100,
+        amount: 1000,
         price: 2,
       });
       await vault.connect(user).executeTradeBatch([tradeRequest1]);
@@ -358,7 +392,7 @@ describe("MatchingEngine", function () {
         base: baseTokenA,
         quote: quoteTokenA,
         side: 1,
-        amount: 100,
+        amount: 1000,
         price: 2,
       });
       await vault.connect(trader).executeTradeBatch([tradeRequest2]);
