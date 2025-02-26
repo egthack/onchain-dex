@@ -951,7 +951,7 @@ export default function TradingPage() {
             <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
             <p className="break-all mb-3">
               Tx Hash: <a
-                href={`${env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet-explorer.riselabs.xyz'}/tx/${txHash}`}
+                href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-accent-green underline"
