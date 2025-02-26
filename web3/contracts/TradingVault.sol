@@ -261,6 +261,8 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 );
                 exactQuoteAmount = exactQuoteAmount / 100;
             }
+            // 新たに6桁精度に切り捨てる
+            truncatedQuoteAmount = _truncateToMinimumDecimals(exactQuoteAmount);
 
             // 残高チェックは完全な精度で行う
             require(
@@ -268,12 +270,9 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 "Insufficient quote balance"
             );
 
-            // 残高から引く金額は元の値を使用（6桁→quoteトークンのdecimals）
-            uint256 scaledQuoteAmount = exactQuoteAmount *
-                (10 ** (quoteDecimals - MINIMUM_DECIMALS));
+            uint256 scaledQuoteAmount = truncatedQuoteAmount * (10 ** (quoteDecimals - MINIMUM_DECIMALS));
             balances[req.user][req.quote] -= scaledQuoteAmount;
 
-            // 返り値（ロックした金額）はquoteトークンのdecimals精度の値
             return scaledQuoteAmount;
         } else {
             if (req.price == 0) {
@@ -295,8 +294,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             );
 
             // 残高から引く金額は切り捨てた値を使用（6桁→baseトークンのdecimals）
-            uint256 scaledBaseAmount = truncatedBaseAmount *
-                (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            uint256 scaledBaseAmount = truncatedBaseAmount * (10 ** (baseDecimals - MINIMUM_DECIMALS));
             balances[req.user][req.base] -= scaledBaseAmount;
 
             // 返り値（ロックした金額）はbaseトークンのdecimals精度の値

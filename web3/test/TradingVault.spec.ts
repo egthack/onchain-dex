@@ -449,26 +449,53 @@ describe("TradingVault", function () {
 
       // 取引リクエスト作成：Buy注文
       // amount = 100 (0.0001 ETH)
-      // price = 1 (0.01 USDC)
-      // 計算結果: 0.0001 * 0.01 = 0.000001 USDC（最小単位と同じ）
+      // price = 100 (1.00 USDC)
+      // 計算結果: 0.0001 * 1.00 = 0.0001 USDC（ロック額は100（6桁表現）として計算）
       const tradeRequest = await createTradeRequest({
         user: user,
         base: baseToken,
         quote: usdcToken,
         side: 0, // Buy
-        amount: 100, // 0.0001
-        price: 1, // 0.01
+        amount: 100,
+        price: 100,
       });
 
       // 注文が正常に実行されることを確認
-      await expect(vault.connect(user).executeTradeBatch([tradeRequest])).to.not
-        .be.reverted;
+      await expect(vault.connect(user).executeTradeBatch([tradeRequest])).to.not.be.reverted;
 
       // 注文情報を取得して確認
       const orderId = 0;
       const order = await engine.getOrder(orderId);
-      expect(order.amount).to.equal(100); // 0.0001
-      expect(order.price).to.equal(1); // 0.01
+      expect(order.amount).to.equal(100);
+      expect(order.price).to.equal(100);
+    });
+
+    it("should properly truncate buy order amounts to 6 decimals", async function () {
+      // 整数値でデポジット（十分なUSDC）
+      const depositAmount = ethers.parseUnits("10000", 6);
+      await usdcToken.connect(user).approve(await vault.getAddress(), depositAmount);
+      await vault.connect(user).deposit(await usdcToken.getAddress(), depositAmount);
+
+      // 取引リクエスト作成：Buy注文
+      // amount = 1234567, price = 123
+      // exactQuoteAmount = (1234567 * 123) / 100 = 1518517 (小数点以下切り捨て)
+      // _truncateToMinimumDecimals(1518517) = (1518517 / 1000000)*1000000 = 1000000
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseToken,
+        quote: usdcToken,
+        side: 0, // Buy
+        amount: 1234567,
+        price: 123,
+      });
+
+      // 注文実行
+      await vault.connect(user).executeTradeBatch([tradeRequest]);
+
+      // 注文実行後、ロックされた金額はUSDCなので、factor = 10^(6-6)=1、期待値は1000000
+      const balanceAfter = await vault.getBalance(await user.getAddress(), await usdcToken.getAddress());
+      const expectedBalance = depositAmount - BigInt(1000000);
+      expect(balanceAfter).to.equal(expectedBalance);
     });
   });
 
