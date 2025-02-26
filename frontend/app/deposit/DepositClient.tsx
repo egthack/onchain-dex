@@ -69,6 +69,7 @@ export default function DepositClient() {
   const [txHash, setTxHash] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   // Fetch deposit balance for the selected token
   const fetchDepositBalance = useCallback(async () => {
@@ -121,6 +122,7 @@ export default function DepositClient() {
       } else {
         setTxHash(hash);
         setIsApproved(true);
+        setModalOpen(true);
         console.log("Approve successful");
       }
     } catch (err: unknown) {
@@ -161,6 +163,8 @@ export default function DepositClient() {
         setTxHash(hash);
         console.log("Deposit successful");
         fetchDepositBalance();
+        setIsApproved(false);
+        setModalOpen(true);
       }
     } catch (err: unknown) {
       console.error("Deposit failed", err);
@@ -200,6 +204,7 @@ export default function DepositClient() {
         setTxHash(hash);
         console.log("Withdraw successful");
         fetchDepositBalance();
+        setModalOpen(true);
       }
     } catch (err: unknown) {
       console.error("Withdraw failed", err);
@@ -265,6 +270,7 @@ export default function DepositClient() {
               className="trading-input"
               placeholder="0.00"
               value={amount}
+              disabled={isApproved}
               onChange={(e) => {
                 setAmount(e.target.value);
                 setIsApproved(false); // reset approval if amount changes
@@ -313,6 +319,43 @@ export default function DepositClient() {
             >
               {isLoading ? "処理中..." : "Withdraw"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
+            {error ? (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Failed</h3>
+                <p className="break-all mb-3">{error}</p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
+                <p className="break-all mb-3">
+                  Tx Hash: <a
+                    href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-green underline"
+                  >
+                    {txHash}
+                  </a>
+                </p>
+              </>
+            )}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => { setModalOpen(false); setError(""); }}
+                className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
