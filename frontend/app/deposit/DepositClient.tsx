@@ -6,7 +6,7 @@ import TradingVaultABI from "../../abi/ITradingVault.json";
 import ERC20ABI from "../../abi/IERC20.json";
 import env from "../../env.json";
 
-const TOKENS = ["WETH", "USDC", "WBTC", "POL"];
+const TOKENS = ["USDC", "WETH", "WBTC", "POL"];
 
 function getTokenDecimals(token: string): number {
   const tokenDecimals: { [key: string]: number } = {
@@ -62,12 +62,13 @@ export default function DepositClient() {
 
   // State variables
   const [selectedToken, setSelectedToken] = useState<string>(TOKENS[0]);
-  const [depositAmount, setDepositAmount] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [action, setAction] = useState<'deposit' | 'withdraw'>('deposit');
+  const [amount, setAmount] = useState("");
   const [depositBalance, setDepositBalance] = useState<bigint>(BigInt(0));
   const [error, setError] = useState("");
   const [txHash, setTxHash] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isApproved, setIsApproved] = useState(false);
 
   // Fetch deposit balance for the selected token
   const fetchDepositBalance = useCallback(async () => {
@@ -105,7 +106,7 @@ export default function DepositClient() {
     try {
       const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
       const decimals = getTokenDecimals(selectedToken);
-      const approveAmount = (depositAmount && depositAmount !== "0") ? depositAmount : "1000000";
+      const approveAmount = (amount && amount !== "0") ? amount : "1000000";
       const amountBN = convertToTokenUnits(approveAmount, decimals);
       const hash = await walletClient.writeContract({
         address: tokenAddress,
@@ -119,6 +120,7 @@ export default function DepositClient() {
         setError("Approveの実行に失敗しました");
       } else {
         setTxHash(hash);
+        setIsApproved(true);
         console.log("Approve successful");
       }
     } catch (err: unknown) {
@@ -144,7 +146,7 @@ export default function DepositClient() {
     try {
       const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
       const decimals = getTokenDecimals(selectedToken);
-      const amountBN = convertToTokenUnits(depositAmount, decimals);
+      const amountBN = convertToTokenUnits(amount, decimals);
       const hash = await walletClient.writeContract({
         address: VAULT_ADDRESS as `0x${string}`,
         abi: TradingVaultABI.abi,
@@ -183,7 +185,7 @@ export default function DepositClient() {
     try {
       const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
       const decimals = getTokenDecimals(selectedToken);
-      const amountBN = convertToTokenUnits(withdrawAmount, decimals);
+      const amountBN = convertToTokenUnits(amount, decimals);
       const hash = await walletClient.writeContract({
         address: VAULT_ADDRESS as `0x${string}`,
         abi: TradingVaultABI.abi,
@@ -208,7 +210,7 @@ export default function DepositClient() {
   }
 
   return (
-    <div className="p-6">
+    <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Deposit/Withdraw Page</h1>
 
       {/* Token Selection */}
@@ -233,61 +235,87 @@ export default function DepositClient() {
       {error && <p className="mb-4 text-red-500">{error}</p>}
       {txHash && <p className="mb-4 text-green-400 break-all">Tx Hash: {txHash}</p>}
 
-      {/* Deposit Form */}
-      <div className="bg-trading-gray rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Deposit {selectedToken}</h2>
-        <div className="mb-3">
-          <label htmlFor="deposit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Deposit Amount ({selectedToken})</label>
-          <input
-            id="deposit-amount-input"
-            type="number"
-            className="trading-input"
-            placeholder="0.00"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={handleApprove}
-            disabled={isLoading}
-            className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-          >
-            {isLoading ? "処理中..." : "Approve"}
-          </button>
-          <button
-            type="button"
-            onClick={handleDeposit}
-            disabled={isLoading}
-            className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-          >
-            {isLoading ? "処理中..." : "Deposit"}
-          </button>
-        </div>
+      {/* Action Selector */}
+      <div className="flex gap-4 mb-4">
+        <button
+          type="button"
+          onClick={() => setAction('deposit')}
+          className={`px-4 py-2 rounded ${action === 'deposit' ? 'bg-accent-green text-black' : 'bg-trading-light text-white'}`}
+        >
+          Deposit
+        </button>
+        <button
+          type="button"
+          onClick={() => setAction('withdraw')}
+          className={`px-4 py-2 rounded ${action === 'withdraw' ? 'bg-accent-green text-black' : 'bg-trading-light text-white'}`}
+        >
+          Withdraw
+        </button>
       </div>
 
-      {/* Withdraw Form */}
-      <div className="bg-trading-gray rounded-lg p-4">
-        <h2 className="text-lg font-semibold mb-3">Withdraw {selectedToken}</h2>
-        <div className="mb-3">
-          <label htmlFor="withdraw-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Withdraw Amount ({selectedToken})</label>
-          <input
-            id="withdraw-amount-input"
-            type="number"
-            className="trading-input"
-            placeholder="0.00"
-            value={withdrawAmount}
-            onChange={(e) => setWithdrawAmount(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={handleWithdraw}
-            disabled={isLoading}
-            className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-          >
-            {isLoading ? "処理中..." : "Withdraw"}
-          </button>
+      {action === 'deposit' ? (
+        /* Deposit Form */
+        <div className="bg-trading-gray rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-3">Deposit {selectedToken}</h2>
+          <div className="mb-3">
+            <label htmlFor="deposit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Deposit Amount ({selectedToken})</label>
+            <input
+              id="deposit-amount-input"
+              type="number"
+              className="trading-input"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setIsApproved(false); // reset approval if amount changes
+              }}
+            />
+            {!isApproved ? (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={isLoading || !amount || amount === "0"}
+                className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
+              >
+                {isLoading ? "処理中..." : "Approve"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDeposit}
+                disabled={isLoading || !amount || amount === "0"}
+                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+              >
+                {isLoading ? "処理中..." : "Deposit"}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Withdraw Form */
+        <div className="bg-trading-gray rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-3">Withdraw {selectedToken}</h2>
+          <div className="mb-3">
+            <label htmlFor="withdraw-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Withdraw Amount ({selectedToken})</label>
+            <input
+              id="withdraw-amount-input"
+              type="number"
+              className="trading-input"
+              placeholder="0.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={handleWithdraw}
+              disabled={isLoading || !amount || amount === "0"}
+              className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+            >
+              {isLoading ? "処理中..." : "Withdraw"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
