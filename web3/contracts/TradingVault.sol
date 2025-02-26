@@ -253,27 +253,28 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 exactQuoteAmount = req.amount;
             } else {
                 // amount(6桁) * price(2桁) / 100 = 6桁
-                // 先にamountとpriceを掛け算してから100で割る
+                // Simply use safe math; overflow checks are performed by Solidity 0.8
                 exactQuoteAmount = req.amount * req.price;
-                require(
-                    exactQuoteAmount >= MINIMUM_AMOUNT * 100,
-                    "Quote amount below minimum threshold"
-                );
+                require(exactQuoteAmount >= MINIMUM_AMOUNT * 100, "Quote amount below minimum threshold");
                 exactQuoteAmount = exactQuoteAmount / 100;
+
+                // 新たに6桁精度に切り捨てる
+                truncatedQuoteAmount = _truncateToMinimumDecimals(exactQuoteAmount);
+                // 追加: 切り捨て後が0ならオーダーを拒否する
+                require(truncatedQuoteAmount > 0, "Trade amount below minimum");
+
+                // 残高チェックは完全な精度で行う
+                require(
+                    balances[req.user][req.quote] >= exactQuoteAmount,
+                    "Insufficient quote balance"
+                );
+
+                // Calculate scaledQuoteAmount using standard multiplication
+                uint256 scaledQuoteAmount = truncatedQuoteAmount * (10 ** (quoteDecimals - MINIMUM_DECIMALS));
+                balances[req.user][req.quote] -= scaledQuoteAmount;
+
+                return scaledQuoteAmount;
             }
-            // 新たに6桁精度に切り捨てる
-            truncatedQuoteAmount = _truncateToMinimumDecimals(exactQuoteAmount);
-
-            // 残高チェックは完全な精度で行う
-            require(
-                balances[req.user][req.quote] >= exactQuoteAmount,
-                "Insufficient quote balance"
-            );
-
-            uint256 scaledQuoteAmount = truncatedQuoteAmount * (10 ** (quoteDecimals - MINIMUM_DECIMALS));
-            balances[req.user][req.quote] -= scaledQuoteAmount;
-
-            return scaledQuoteAmount;
         } else {
             if (req.price == 0) {
                 // 対向の板があることだけを確認
@@ -286,6 +287,8 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
 
             // 小数点以下6桁の精度に切り捨て
             truncatedBaseAmount = _truncateToMinimumDecimals(exactBaseAmount);
+            // 追加: 切り捨て後が0ならオーダーを拒否する
+            require(truncatedBaseAmount > 0, "Trade amount below minimum");
 
             // 残高チェックは完全な精度で行う
             require(
