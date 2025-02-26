@@ -1,14 +1,50 @@
 import { ethers } from "hardhat";
 import type { BigNumberish, ContractTransaction } from "ethers";
 import type { TransactionReceipt } from "@ethersproject/providers";
+import fs from "node:fs";
+import path from "node:path";
+import * as hre from "hardhat";
 
 // Define a new type that extends ContractTransaction with a wait method
 type MyContractTransaction = ContractTransaction & { wait: () => Promise<TransactionReceipt> };
+
+function getLatestDeployment(network: string): {
+  tokens: Record<string, string>;
+  trading: Record<string, string>;
+} {
+  const deploymentPath = path.join(__dirname, "../deployments", network);
+  const files = fs
+    .readdirSync(deploymentPath)
+    .filter((f) => f.startsWith(`deployment-${network}`))
+    .sort((a, b) => {
+      const timeA = Number.parseInt(a.split("-").pop()?.replace(".json", "") || "0");
+      const timeB = Number.parseInt(b.split("-").pop()?.replace(".json", "") || "0");
+      return timeB - timeA;
+    });
+
+  if (files.length === 0) {
+    throw new Error(`No deployment found for network: ${network}`);
+  }
+
+  const deployment = JSON.parse(
+    fs.readFileSync(path.join(deploymentPath, files[0]), "utf8")
+  );
+  return deployment.contracts;
+}
 
 async function main() {
   // Define deployment parameters
   // faucetAmount: Amount of tokens to dispense per request (example: 1 token in wei)
   // cooldown: Cooldown period in seconds (example: 3600 seconds = 1 hour)
+  const [deployer] = await ethers.getSigners();
+
+  // デプロイされたコントラクトのアドレスを取得
+  const network = hre.network.name;
+  const deployment = {
+    contracts: getLatestDeployment(network),
+  };
+
+
   const faucetAmount = ethers.parseEther("1");
   const cooldown = 3600;
 
@@ -31,10 +67,10 @@ async function main() {
 
   // Optionally, set maxTokenAmount for specific token addresses after deployment
   // 例として、WETHとUSDCのmaxTokenAmountを設定します
-  const wethAddress = "0xb0FA0536A85DfbFA078f51D8a52A009A86F7cc72";  
-  const usdcAddress = "0xf96c5D210da8Ad33b2BAdEeDF59cCAEBBb4e2629";
-  const wbtcAddress = "0xd59874ceC35C7E9Ff121e27Ac72367Bbc28f3FE8";
-  const polAddress = "0xfB9519fD8730Bff3Cf8469C5634B6338E95a378e";
+  const wethAddress = deployment.contracts.tokens.WETH;  
+  const usdcAddress = deployment.contracts.tokens.USDC;
+  const wbtcAddress = deployment.contracts.tokens.WBTC;
+  const polAddress = deployment.contracts.tokens.POL;
   // WETH: 例として最大10トークンを設定（WETHは18桁）
   const txWETH = await faucetContract.setMaxTokenAmount(wethAddress, ethers.parseUnits("100", 18));
   await txWETH.wait();
