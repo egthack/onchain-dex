@@ -238,7 +238,6 @@ export default function DepositClient() {
       </div>
 
       {error && <p className="mb-4 text-red-500">{error}</p>}
-      {txHash && <p className="mb-4 text-green-400 break-all">Tx Hash: {txHash}</p>}
 
       {/* Action Selector */}
       <div className="flex gap-4 mb-4">
