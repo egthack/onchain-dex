@@ -70,6 +70,7 @@ export default function DepositClient() {
   const [isLoading, setIsLoading] = useState(false);
   const [isApproved, setIsApproved] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<bigint>(BigInt(0));
 
   // Fetch deposit balance for the selected token
   const fetchDepositBalance = useCallback(async () => {
@@ -86,6 +87,26 @@ export default function DepositClient() {
     } catch (err) {
       console.error("Failed to fetch deposit balance", err);
     }
+  }, [isConnected, address, publicClient, selectedToken]);
+
+  // Add a new useEffect to fetch wallet token balance
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      if (!isConnected || !address || !publicClient) return;
+      try {
+        const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
+        const balance = await publicClient.readContract({
+          address: tokenAddress,
+          abi: ERC20ABI.abi,
+          functionName: "balanceOf",
+          args: [address]
+        });
+        setWalletBalance(balance as bigint);
+      } catch (err) {
+        console.error("Failed to fetch wallet balance", err);
+      }
+    };
+    fetchWalletBalance();
   }, [isConnected, address, publicClient, selectedToken]);
 
   useEffect(() => {
@@ -230,6 +251,11 @@ export default function DepositClient() {
             {token}
           </button>
         ))}
+      </div>
+
+      {/* Display wallet balance */}
+      <div className="mb-4 text-white">
+        Wallet balance: {formatTokenUnits(walletBalance, getTokenDecimals(selectedToken))} {selectedToken}
       </div>
 
       {/* Display current balance */}
