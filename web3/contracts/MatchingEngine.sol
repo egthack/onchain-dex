@@ -584,15 +584,18 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             uint256 refundAmount = 0;
             address refundToken = address(0);
             if (order.side == OrderSide.Buy) {
+                // lockされているのはquote token
                 uint256 lockedAmount = _tradingVault.getLockedAmount(order.id);
                 refundAmount = (lockedAmount * remaining) / originalAmount;
                 refundToken = order.quote;
             } else {
+                // lockされているのはbase token
                 refundAmount = remaining;
                 refundToken = order.base;
             }
             require(refundAmount == 0 || refundToken != address(0), "Invalid refund token");
             if (refundAmount > 0) {
+                // console.log('refundAmount', refundAmount);
                 uint8 tokenDecimals = IERC20Metadata(refundToken).decimals();
                 uint256 scaledRefund = _truncateToMinimumDecimals(refundAmount) * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
                 _tradingVault.creditBalance(order.user, refundToken, scaledRefund);
