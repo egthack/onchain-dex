@@ -91,28 +91,29 @@ export default function DepositClient() {
   }, [isConnected, address, publicClient, selectedToken]);
 
   // Add a new useEffect to fetch wallet token balance
-  useEffect(() => {
-    const fetchWalletBalance = async () => {
-      if (!isConnected || !address || !publicClient) return;
-      try {
-        const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
-        const balance = await publicClient.readContract({
-          address: tokenAddress,
-          abi: ERC20ABI.abi,
-          functionName: "balanceOf",
-          args: [address]
-        });
-        setWalletBalance(balance as bigint);
-      } catch (err) {
-        console.error("Failed to fetch wallet balance", err);
-      }
-    };
-    fetchWalletBalance();
+  const fetchWalletBalance = useCallback(async () => {
+    if (!isConnected || !address || !publicClient) return;
+    try {
+      const tokenAddress = TOKEN_ADDRESSES[selectedToken as keyof typeof TOKEN_ADDRESSES] as `0x${string}`;
+      const balance = await publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20ABI.abi,
+        functionName: "balanceOf",
+        args: [address]
+      });
+      setWalletBalance(balance as bigint);
+    } catch (err) {
+      console.error("Failed to fetch wallet balance", err);
+    }
   }, [isConnected, address, publicClient, selectedToken]);
 
   useEffect(() => {
     fetchDepositBalance();
   }, [fetchDepositBalance]);
+
+  useEffect(() => {
+    fetchWalletBalance();
+  }, [fetchWalletBalance]);
 
   // Deposit approval function
   async function handleApprove() {
@@ -185,6 +186,7 @@ export default function DepositClient() {
         setTxHash(hash);
         console.log("Deposit successful");
         fetchDepositBalance();
+        fetchWalletBalance();
         setIsApproved(false);
         setModalOpen(true);
       }
