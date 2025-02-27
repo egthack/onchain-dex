@@ -483,10 +483,14 @@ export default function TradingPage() {
         setModalOpen(true);
       } else {
         setError("");
-      setTxHash(hash);
+        setTxHash(hash);
+        if (side === "buy") {
+          fetchDepositBalanceQuote();
+        } else {
+          fetchDepositBalance();
+        }
         setModalOpen(true);
         console.log("Order placed successfully via TradingVault");
-        fetchDepositBalance();
       }
     } catch (err: unknown) {
       console.error("Order failed", err);
