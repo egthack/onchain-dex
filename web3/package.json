@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test",
+    "compile": "hardhat compile && ts-node scripts/exportAbi.ts",
+    "clean": "hardhat clean",
+    "export-abi": "ts-node scripts/exportAbi.ts"
   },
   "author": "",
   "license": "ISC",
