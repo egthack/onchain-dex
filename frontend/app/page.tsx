@@ -815,9 +815,12 @@ export default function TradingPage() {
                 for (let i = 0; i < emptyCount; i++) {
                   rows.push(<div key={`empty-sell-${i}`} className="h-6" />);
                 }
+                const maxSellTotal = aggregatedSellOrdersWithTotal.length ? Math.max(...aggregatedSellOrdersWithTotal.map(o => o.total)) : 0;
                 for (const order of aggregatedSellOrdersWithTotal) {
+                  const ratio = maxSellTotal ? (order.total / maxSellTotal) * 100 : 0;
                   rows.push(
-                    <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
+                    <div key={order.price} className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
+                      <div className="absolute top-0 left-0 h-full bg-red-500 opacity-30" style={{ width: `${ratio}%` }} />
                       <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
                       <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
                       <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
@@ -840,9 +843,12 @@ export default function TradingPage() {
               {(() => {
                 const rows = [];
                 // For buy orders, align orders at the top by rendering orders first
+                const maxBuyTotal = aggregatedBuyOrdersWithTotal.length ? Math.max(...aggregatedBuyOrdersWithTotal.map(o => o.total)) : 0;
                 for (const order of aggregatedBuyOrdersWithTotal) {
+                  const ratio = maxBuyTotal ? (order.total / maxBuyTotal) * 100 : 0;
                   rows.push(
-                    <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
+                    <div key={order.price} className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
+                      <div className="absolute top-0 left-0 h-full bg-green-500 opacity-30" style={{ width: `${ratio}%` }} />
                       <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
                       <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
                       <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
