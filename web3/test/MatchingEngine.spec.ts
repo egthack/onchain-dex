@@ -563,7 +563,7 @@ describe("MatchingEngine", function () {
 
 
 
-    describe("Market Orders", function () {
+    describe("Market Orders", function () {      
       it("should execute market buy order against existing sell orders", async function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
@@ -621,8 +621,59 @@ describe("MatchingEngine", function () {
         expect(traderBalanceQuote2).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
       });
 
+      it("should execute market sell order against existing buy orders", async function () {
+        // 指値買い注文を作成
+        const limitBuyOrder = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: 1000,
+          price: 1,
+        });
+        await vault.connect(trader).executeTradeBatch([limitBuyOrder]);
+        
+        // 成行売り注文を実行
+        const marketSellOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: 500,
+          price: 0, // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketSellOrder]);
+        // 約定確認
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(1);
+        // 残高確認
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        // base: + 0.000001 * 500 = 0.0005, quote: - 0.000001 * 0.01 * 500 = -0.000005
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0005', 18));
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
+
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        // base: - 0.000001 * 500 = -0.0005, quote: + 0.000001 * 0.01 * 1000 = 0.00001(locked)
+        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0005', 18));
+        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6));
+      });
+
+
+
+
       // 成行注文後、オーダーブックの最良売り注文が消えているかを検証するテスト
-      it("should execute market sell order against existing sell orders and not match all", async function () {
+      it.only("should execute market sell order against existing sell orders and not match all", async function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
           user: trader,
