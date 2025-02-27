@@ -149,7 +149,7 @@ const main = async () => {
   // デプロイ情報をJSONファイルに保存
   const deploymentPath = path.join(
     __dirname,
-    "../deployments",
+    "../../deployments",
     hre.network.name
   );
   if (!fs.existsSync(deploymentPath)) {
