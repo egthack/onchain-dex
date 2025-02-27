@@ -88,7 +88,6 @@ export default function TradingPage() {
 
   const [depositBalanceQuote, setDepositBalanceQuote] = useState<bigint>(BigInt(0));
 
-  const [cancelOrderId, setCancelOrderId] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
 
   const [marketPriceError, setMarketPriceError] = useState("");
@@ -494,49 +493,6 @@ export default function TradingPage() {
         setError(err.message);
       } else {
         setError("Order execution failed");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  async function handleCancelOrder() {
-    setError("");
-    if (!walletClient || !publicClient) {
-      setError("Wallet or public client is not connected");
-      return;
-    }
-    if (!cancelOrderId || cancelOrderId === "") {
-      setError("Please enter the Order ID to cancel");
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const orderIdBN = BigInt(cancelOrderId);
-      const hash = await walletClient.writeContract({
-        address: VAULT_ADDRESS,
-        abi: vaultAbi,
-        functionName: "cancelOrder",
-        args: [orderIdBN],
-        gas: BigInt(300000)
-      });
-
-      const receiptCancel = await publicClient.waitForTransactionReceipt({ hash });
-      if (receiptCancel.status !== "success") {
-        setError("Order cancellation failed");
-        setModalOpen(true);
-      } else {
-        setError("");
-        setTxHash(hash);
-        setModalOpen(true);
-        console.log("Order cancellation successful");
-      }
-    } catch (err: unknown) {
-      console.error("Cancel order failed", err);
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError("Order cancellation failed");
       }
     } finally {
       setIsLoading(false);
