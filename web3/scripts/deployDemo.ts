@@ -72,36 +72,6 @@ const main = async () => {
     console.log(`${token.symbol} deployed to:`, await baseToken.getAddress());
     token.address = await baseToken.getAddress();
   }
-  // トークンをFaucetに追加
-  const FaucetFactory = await ethers.getContractFactory("Faucet");
-  const faucet = await FaucetFactory.connect(deployer).deploy();
-  await faucet.waitForDeployment();
-  deployedAddresses.contracts.tokens.faucet = await faucet.getAddress();
-  console.log("Faucet deployed to:", await faucet.getAddress());
-
-  for (const token of Object.values(tokens)) {
-    const faucetAmount =
-      (token.amount * BigInt(10) ** BigInt(token.decimals)) / 2n;
-    // 1. トークンコントラクトのインスタンス取得
-    const tokenContract = (await ethers.getContractAt(
-      "MockERC20",
-      token.address
-    )) as MockERC20;
-
-    // 2. Faucetへのapproveを実行
-    const approveTx = await tokenContract
-      .connect(deployer)
-      .approve(await faucet.getAddress(), faucetAmount);
-    await approveTx.wait(); // トランザクションの完了を待つ
-    console.log(`Approved ${token.symbol} for Faucet`);
-
-    // 3. Faucetにトークンを追加
-    const addTokenTx = await faucet
-      .connect(deployer)
-      .addToken(token.address, faucetAmount);
-    await addTokenTx.wait(); // トランザクションの完了を待つ
-    console.log(`Added ${faucetAmount} ${token.symbol} to Faucet`);
-  }
 
   const MatchingEngineFactory = await ethers.getContractFactory(
     "MatchingEngine"
