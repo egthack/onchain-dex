@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./interfaces/ITradingVault.sol";
 import "./interfaces/IMatchingEngine.sol";
 import "./library/VaultLib.sol";
@@ -15,6 +16,13 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  *      It allows executing batched trades via an external MatchingEngine.
  */
 contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
+    /// @notice 必要最小限の小数点以下桁数
+    uint8 private constant MINIMUM_DECIMALS = 6;
+    /// @notice 最小取引量（1 = 0.000001 * 10^6）
+    uint256 private constant MINIMUM_AMOUNT = 1;
+    /// @notice 精度調整用の係数（小数点以下6桁精度）
+    uint256 private constant PRECISION_FACTOR = 1000000;
+
     // Mapping: user => (token => available balance)
     mapping(address => mapping(address => uint256)) public balances;
     // Matching engine contract instance
@@ -34,6 +42,32 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         _;
     }
 
+    /// @notice トークンの小数点以下桁数を検証
+    function _validateTokenDecimals(address token) internal view {
+        uint8 decimals = IERC20Metadata(token).decimals();
+        if (decimals < MINIMUM_DECIMALS) {
+            revert InsufficientDecimals(token, decimals);
+        }
+    }
+
+    /// @notice 金額を小数点以下6桁の精度に切り捨て
+    /// @dev 切り捨て前の値が0より大きく、切り捨て後が0になる場合は最小値を返す
+    function _truncateToMinimumDecimals(
+        uint256 amount
+    ) internal pure returns (uint256) {
+        // 小さな値（PRECISION_FACTOR未満）の場合は、そのまま返す
+        if (amount < PRECISION_FACTOR) {
+            return amount;
+        }
+
+        uint256 truncated = (amount / PRECISION_FACTOR) * PRECISION_FACTOR;
+        // 切り捨てによってゼロになるが、元の値が0より大きい場合は最小値を設定
+        if (truncated == 0 && amount > 0) {
+            return MINIMUM_AMOUNT;
+        }
+        return truncated;
+    }
+
     /**
      * @notice Deposits tokens into the Vault.
      */
@@ -42,6 +76,9 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
         uint256 amount
     ) external override nonReentrant {
         require(amount > 0, "Amount must be > 0");
+
+        // トークンの小数点以下桁数を検証
+        _validateTokenDecimals(token);
 
         bool success = IERC20(token).transferFrom(
             msg.sender,
@@ -125,14 +162,25 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
     function _executeSingleTrade(VaultLib.TradeRequest calldata req) internal {
         VaultLib.checkTradeRequest(req);
 
+        // トークンの小数点以下桁数を検証
+        _validateTokenDecimals(req.base);
+        _validateTokenDecimals(req.quote);
+
+        // 最小取引量のチェック
+        require(req.amount >= MINIMUM_AMOUNT, "Amount below minimum threshold");
+
         // 1. トークンのロックと注文の作成
         uint256 lockedAmount = _lockTokens(req);
+
+        // 注文量を小数点以下6桁の精度に切り捨て
+        uint256 truncatedAmount = _truncateToMinimumDecimals(req.amount);
+
         uint256 orderId = engine.placeOrder(
             req.user,
             req.base,
             req.quote,
             req.side,
-            req.amount,
+            truncatedAmount,
             req.price
         );
         lockedAmounts[orderId] = lockedAmount;
@@ -147,7 +195,7 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
             req.base,
             req.quote,
             req.price,
-            req.amount
+            truncatedAmount
         );
     }
 
@@ -167,7 +215,29 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
 
         // 3. Refund the remaining order amount (order.amount) to the user's vault balance
         if (order.amount > 0) {
-            balances[msg.sender][order.base] += order.amount;
+            address refundToken;
+            uint8 tokenDecimals;
+            if (order.side == IMatchingEngine.OrderSide.Buy) {
+                refundToken = order.quote;
+                tokenDecimals = IERC20Metadata(order.quote).decimals();
+            } else {
+                refundToken = order.base;
+                tokenDecimals = IERC20Metadata(order.base).decimals();
+            }
+            uint256 refundAmount;
+            if (order.side == IMatchingEngine.OrderSide.Buy) {
+                refundAmount =
+                    (order.amount *
+                        (10 ** (tokenDecimals - MINIMUM_DECIMALS))) /
+                    100;
+            } else {
+                refundAmount =
+                    order.amount *
+                    (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+            }
+
+            order.amount * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+            balances[msg.sender][refundToken] += refundAmount;
         }
 
         emit OrderCancelled(orderId, msg.sender);
@@ -181,8 +251,14 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
     function _lockTokens(
         VaultLib.TradeRequest memory req
     ) internal returns (uint256) {
-        uint256 quoteAmount = 0;
-        uint256 baseAmount;
+        uint256 exactQuoteAmount = 0;
+        uint256 exactBaseAmount = 0;
+        uint256 truncatedQuoteAmount = 0;
+        uint256 truncatedBaseAmount = 0;
+
+        // トークンのdecimalsを取得
+        uint8 baseDecimals = IERC20Metadata(req.base).decimals();
+        uint8 quoteDecimals = IERC20Metadata(req.quote).decimals();
 
         if (req.side == IMatchingEngine.OrderSide.Buy) {
             if (req.price == 0) {
@@ -190,16 +266,44 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 bytes32 pairId = engine.getPairId(req.base, req.quote);
                 uint256 bestSellPrice = engine.getBestSellPrice(pairId);
                 require(bestSellPrice > 0, "No sell orders available");
-                // ロックは指定された数量で
-                quoteAmount = req.amount;
+                // 成行注文の場合、フロントからの数量を8桁精度で扱うため、100で割る
+                exactQuoteAmount = req.amount / 100;
+                balances[req.user][req.quote] -= exactQuoteAmount;
+                return exactQuoteAmount;
             } else {
-                quoteAmount = req.amount * req.price;
+                // amount(6桁) * price(2桁) / 100 = 6桁
+                // Simply use safe math; overflow checks are performed by Solidity 0.8
+                exactQuoteAmount = req.amount * req.price;
+                require(
+                    exactQuoteAmount >= MINIMUM_AMOUNT * 100,
+                    "Quote amount below minimum threshold"
+                );
+                exactQuoteAmount = exactQuoteAmount / 100;
+
+                // 新たに6桁精度に切り捨てる
+                truncatedQuoteAmount = _truncateToMinimumDecimals(
+                    exactQuoteAmount
+                );
+                // 追加: 切り捨て後が0ならオーダーを拒否する
+                require(truncatedQuoteAmount > 0, "Trade amount below minimum");
+
+                // 残高チェックは完全な精度で行う
+                require(
+                    balances[req.user][req.quote] >= exactQuoteAmount,
+                    "Insufficient quote balance"
+                );
+
+                // Calculate scaledQuoteAmount using standard multiplication
+                uint256 scaledQuoteAmount = truncatedQuoteAmount *
+                    (10 ** (quoteDecimals - MINIMUM_DECIMALS));
+                require(
+                    balances[req.user][req.quote] >= scaledQuoteAmount,
+                    "Insufficient quote balance"
+                );
+                balances[req.user][req.quote] -= scaledQuoteAmount;
+
+                return scaledQuoteAmount;
             }
-            require(
-                balances[req.user][req.quote] >= quoteAmount,
-                "Insufficient quote balance"
-            );
-            balances[req.user][req.quote] -= quoteAmount;
         } else {
             if (req.price == 0) {
                 // 対向の板があることだけを確認
@@ -208,15 +312,32 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 require(bestBuyPrice > 0, "No buy orders available");
             }
             // 売り注文は常にbase tokenの数量をロック
-            baseAmount = req.amount;
+            exactBaseAmount = req.amount;
+
+            // 小数点以下6桁の精度に切り捨て
+            truncatedBaseAmount = _truncateToMinimumDecimals(exactBaseAmount);
+
+            // 追加: 切り捨て後が0ならオーダーを拒否する
+            require(truncatedBaseAmount > 0, "Trade amount below minimum");
+
+            // 残高チェックは完全な精度で行う
             require(
-                balances[req.user][req.base] >= baseAmount,
+                balances[req.user][req.base] >= exactBaseAmount,
                 "Insufficient base balance"
             );
-            balances[req.user][req.base] -= baseAmount;
-        }
 
-        return quoteAmount; // ロックした金額を返す
+            // 残高から引く金額は切り捨てた値を使用（6桁→baseトークンのdecimals）
+            uint256 scaledBaseAmount = truncatedBaseAmount *
+                (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            require(
+                balances[req.user][req.base] >= scaledBaseAmount,
+                "Insufficient base balance"
+            );
+            balances[req.user][req.base] -= scaledBaseAmount;
+
+            // 返り値（ロックした金額）はbaseトークンのdecimals精度の値
+            return scaledBaseAmount;
+        }
     }
 
     /**

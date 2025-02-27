@@ -88,3 +88,21 @@ export async function getTokenBalances(
     userBalanceQuote,
   };
 }
+
+
+export async function depositToken(
+  token: MockERC20, 
+  admin: Signer, 
+  depositor: Signer, 
+  vault: TradingVault, 
+  amount: string, 
+  decimals: number
+) {
+  const recipient = await depositor.getAddress();
+  // adminからdepositorへトークンを送付
+  await token.connect(admin).transfer(recipient, ethers.parseUnits(amount, decimals));
+  // depositorによりvaultへの承認
+  await token.connect(depositor).approve(await vault.getAddress(), ethers.parseUnits(amount, decimals));
+  // depositorがvaultへdeposit
+  await vault.connect(depositor).deposit(await token.getAddress(), ethers.parseUnits(amount, decimals));
+}
