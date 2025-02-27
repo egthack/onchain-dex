@@ -412,6 +412,18 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             takerFeesCollected[incoming.base] += takerFee;
             makerFeesCollected[incoming.quote] += makerFee;
 
+            // console.log('orderId', orderId);
+            // console.log('sellOrderId', sellOrderId);
+            // console.log('incoming.base', incoming.base);
+            // console.log('incoming.quote', incoming.quote);
+            // console.log('incoming.price', incoming.price);
+            // console.log('fill', fill);
+            // console.log('remaining', remaining);
+            // console.log('makerFee', makerFee);
+            // console.log('takerFee', takerFee);
+            // console.log('scaledTakerNet', scaledTakerNet);
+            // console.log('scaledMakerNet', scaledMakerNet);
+
             emit TradeExecuted(
                 orderId,
                 sellOrderId,

@@ -564,7 +564,7 @@ describe("MatchingEngine", function () {
 
 
     describe("Market Orders", function () {
-      it.only("should execute market buy order against existing sell orders", async function () {
+      it("should execute market buy order against existing sell orders", async function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
           user: trader,

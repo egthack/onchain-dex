@@ -266,6 +266,10 @@ contract TradingVault is ITradingVault, Ownable, ReentrancyGuard {
                 bytes32 pairId = engine.getPairId(req.base, req.quote);
                 uint256 bestSellPrice = engine.getBestSellPrice(pairId);
                 require(bestSellPrice > 0, "No sell orders available");
+                // マーケット買い注文の場合、ユーザーが指定したquote tokenのamount(req.amount)をそのままロック、これは既に6桁精度のため
+                require(balances[req.user][req.quote] >= req.amount, "Insufficient quote balance");
+                balances[req.user][req.quote] -= req.amount;
+                return req.amount;
             } else {
                 // amount(6桁) * price(2桁) / 100 = 6桁
                 // Simply use safe math; overflow checks are performed by Solidity 0.8
