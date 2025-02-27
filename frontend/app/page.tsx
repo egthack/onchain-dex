@@ -230,7 +230,6 @@ export default function TradingPage() {
           })
         });
         const result = await response.json();
-        console.log("Buy orders:", result.data.orders);
         if (result.data?.orders) {
           setBuyOrderBook(result.data.orders.slice(0, 20));
         } else {
@@ -620,9 +619,10 @@ export default function TradingPage() {
               {selectedPair.base}-{selectedPair.quote}
             </div>
           </div>
-          <div className="h-[400px] rounded bg-trading-light flex items-center justify-center">
-            <div className="text-gray-400">Chart Coming Soon</div>
-          </div>
+          <div
+            id="tradingview_chart"
+            className="h-[400px] rounded overflow-hidden"
+          />
         </div>
 
         {/* Trading Form */}
