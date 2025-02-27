@@ -46,20 +46,22 @@ const vaultAbi = TradingVaultABI.abi;
 declare global {
   interface Window {
     TradingView?: {
-      widget: (options: {
-        autosize: boolean;
-        symbol: string;
-        interval: string;
-        timezone: string;
-        theme: string;
-        style: string;
-        locale: string;
-        toolbar_bg: string;
-        enable_publishing: boolean;
-        hide_side_toolbar: boolean;
-        allow_symbol_change: boolean;
-        container_id: string;
-      }) => void;
+      widget: {
+        new(options: {
+          autosize: boolean;
+          symbol: string;
+          interval: string;
+          timezone: string;
+          theme: string;
+          style: string;
+          locale: string;
+          toolbar_bg: string;
+          enable_publishing: boolean;
+          hide_side_toolbar: boolean;
+          allow_symbol_change: boolean;
+          container_id: string;
+        }): unknown;
+      };
     };
   }
 }
@@ -352,6 +354,8 @@ export default function TradingPage() {
 
   useEffect(() => {
     if (window.TradingView) {
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
       new window.TradingView.widget({
         autosize: true,
         symbol: widgetSymbol,
@@ -364,7 +368,7 @@ export default function TradingPage() {
         enable_publishing: false,
         hide_side_toolbar: false,
         allow_symbol_change: true,
-        container_id: "tradingview_chart",
+        container_id: "tradingview_chart"
       });
     }
   }, [widgetSymbol]);
@@ -588,6 +592,8 @@ export default function TradingPage() {
         strategy="afterInteractive"
         onLoad={() => {
           if (window.TradingView) {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
             new window.TradingView.widget({
               autosize: true,
               symbol: widgetSymbol,
@@ -600,7 +606,7 @@ export default function TradingPage() {
               enable_publishing: false,
               hide_side_toolbar: false,
               allow_symbol_change: true,
-              container_id: "tradingview_chart",
+              container_id: "tradingview_chart"
             });
           }
         }}
