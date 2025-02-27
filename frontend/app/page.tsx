@@ -828,7 +828,7 @@ export default function TradingPage() {
 
           {/* 最新約定価格表示セクション */}
           <div className="my-2 text-center text-lg text-white bg-trading-light py-1 rounded">
-            {latestPrice ? Number.parseFloat(latestPrice).toFixed(2) : "--"} {selectedPair.quote}
+            {latestPrice ? (Number(latestPrice) / 100).toFixed(2) : "--"} {selectedPair.quote}
           </div>
 
           {/* Buy Orders Section */}
