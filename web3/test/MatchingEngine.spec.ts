@@ -935,6 +935,236 @@ describe("MatchingEngine", function () {
         expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0001', 18)); // 初期値10000 + 買った100
         expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6)); // 初期値10000 - 支払った100
       });
+
+      // 売り板に、priceが1000と2000でamountがそれぞれ100の注文を出し、成行買い注文で全て買い上げる
+      it("should execute market buy order for sell orders at prices 1000 and 2000", async function () {
+        // traderが売り注文を出す
+        const sellOrder1 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 100,
+          price: 1000
+        });
+        await vault.connect(trader).executeTradeBatch([sellOrder1]);
+
+        const sellOrder2 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 100,
+          price: 2000
+        });
+        await vault.connect(trader).executeTradeBatch([sellOrder2]);
+
+        // userは成行買い注文で2000のamountを発注
+        const marketBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 300000,
+          price: 0 // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketBuyOrder]);
+
+        // TradeExecutedイベントが2件発火しているはず
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(2);
+
+        // 売り注文がすべて約定済みになっていることを確認
+        const order1 = await matchingEngine.getOrder(0);
+        const order2 = await matchingEngine.getOrder(1);
+        expect(order1.active).to.equal(false);
+        expect(order2.active).to.equal(false);
+
+        // 約定後の残高チェック
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        // + 200 * 0.000001 = 0.0002
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        //  - 300000 * 0.01 * 0.000001 = -0.000003
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.003', 6));
+
+        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
+        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.003', 6));
+      });
+
+      // 買い板に、priceが1000と2000でamountがそれぞれ100の注文を出し、成行売り注文で全て売り払う
+      it("should execute market sell order for buy orders at prices 1000 and 2000", async function () {
+        // traderが買い注文を出す
+        const buyOrder1 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 100,
+          price: 1000
+        });
+        await vault.connect(trader).executeTradeBatch([buyOrder1]);
+
+        const buyOrder2 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 100,
+          price: 2000
+        });
+        await vault.connect(trader).executeTradeBatch([buyOrder2]);
+
+        // userは成行売り注文で200のamountを発注
+        const marketSellOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 200,
+          price: 0 // Market order
+        });
+        await vault.connect(user).executeTradeBatch([marketSellOrder]);
+
+        // TradeExecutedイベントが2件発火しているはず
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(2);
+
+        // 買い注文がすべて約定済みになっていることを確認
+        const order1 = await matchingEngine.getOrder(0);
+        const order2 = await matchingEngine.getOrder(1);
+        expect(order1.active).to.equal(false);
+        expect(order2.active).to.equal(false);
+
+        // 約定後の残高チェック
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.003', 6));
+      });
+
+      // 限度注文で買い板を食う（sell orders に対して limit buy order）のシナリオ
+      it("should execute limit buy order for sell orders at prices 1000 and 2000 with balance check", async function () {
+        // traderがSell orderを出す。priceを20に変更
+        const sellOrder1 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 100,
+          price: 20
+        });
+        await vault.connect(trader).executeTradeBatch([sellOrder1]);
+
+        const sellOrder2 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 100,
+          price: 20
+        });
+        await vault.connect(trader).executeTradeBatch([sellOrder2]);
+
+        // userがlimit buy order（指定価格: 20, amount: 200）で注文
+        const limitBuyOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 200,
+          price: 20
+        });
+        await vault.connect(user).executeTradeBatch([limitBuyOrder]);
+
+        // 2件のTradeExecutedイベントが発生しているはず
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(2);
+
+        // 両方の注文が約定済みであることを確認
+        const order1 = await matchingEngine.getOrder(0);
+        const order2 = await matchingEngine.getOrder(1);
+        expect(order1.active).to.equal(false);
+        expect(order2.active).to.equal(false);
+
+        // 約定後の残高チェック
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        // 200 * 20 * 0.000001 * 0.01 = 0.00004
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00004', 6));
+
+        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
+        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00004', 6));
+      });
+
+      // 限度注文で売り板を食う（buy orders に対して limit sell order）のシナリオ
+      it("should execute limit sell order for buy orders at prices 1000 and 2000 with balance check", async function () {
+        // traderがBuy orderを出す。priceを20に変更
+        const buyOrder1 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 100,
+          price: 20
+        });
+        await vault.connect(trader).executeTradeBatch([buyOrder1]);
+
+        const buyOrder2 = await createTradeRequest({
+          user: trader,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy order
+          amount: 100,
+          price: 20
+        });
+        await vault.connect(trader).executeTradeBatch([buyOrder2]);
+
+        // userがlimit sell order（指定価格: 20, amount: 200）で注文
+        const limitSellOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell order
+          amount: 200,
+          price: 20
+        });
+        await vault.connect(user).executeTradeBatch([limitSellOrder]);
+
+        // 2件のTradeExecutedイベントが発生しているはず
+        const tradeExecutedEvents = await getContractEvents(
+          matchingEngine,
+          matchingEngine.filters.TradeExecuted
+        );
+        expect(tradeExecutedEvents.length).to.equal(2);
+
+        // 両方の注文が約定済みであることを確認
+        const order1 = await matchingEngine.getOrder(0);
+        const order2 = await matchingEngine.getOrder(1);
+        expect(order1.active).to.equal(false);
+        expect(order2.active).to.equal(false);
+
+        // 約定後の残高チェック
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        // 200 * 0.000001 = 0.0002
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
+        // 200 * 20 * 0.01 * 0.000001 = 0.00004
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00004', 6));
+
+        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        // 200 * 20 * 0.01 * 0.000001 = 0.00004
+        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00004', 6));
+      });
     });
   });
 
