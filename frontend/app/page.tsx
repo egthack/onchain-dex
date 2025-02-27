@@ -343,7 +343,7 @@ export default function TradingPage() {
           console.log("Last filled order price:", price);
           setLatestPrice(price);
       } else {
-          console.error("No filled orders found", result);
+          console.log("No filled orders found", result);
           setLatestPrice("");
         }
       } catch (error) {
