@@ -107,6 +107,7 @@ export default function TradingPage() {
 
   // Add new state variable for orders at the beginning of the component (after other state declarations)
   const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
 
   // Compute open orders and history orders
   const openOrders = myOrders.filter(order => order.status === 'OPEN');
@@ -709,8 +710,117 @@ export default function TradingPage() {
           </div>
         </div>
 
-        {/* Trading Form */}
-        <div className="bg-trading-gray rounded-lg p-3">
+        {/* Tabbed view for MY OPEN ORDERS and HISTORY */}
+        <div>
+          <div className="flex mb-4 border-b border-gray-500">
+            <button
+              type="button"
+              className={`px-4 py-2 focus:outline-none ${activeTab === 'open' ? 'border-b-2 border-accent-green text-white' : 'text-gray-400'}`}
+              onClick={() => setActiveTab('open')}
+            >
+              MY OPEN ORDERS
+            </button>
+            <button
+              type="button"
+              className={`ml-4 px-4 py-2 focus:outline-none ${activeTab === 'history' ? 'border-b-2 border-accent-green text-white' : 'text-gray-400'}`}
+              onClick={() => setActiveTab('history')}
+            >
+              HISTORY
+            </button>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: '300px' }}>
+            <table className="min-w-full divide-y divide-trading-light bg-trading-gray rounded-lg overflow-hidden shadow-md">
+              <thead className="bg-trading-light">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Price</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Amount</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">{activeTab === 'open' ? 'Side' : 'Status'}</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-trading-light">
+                {(activeTab === 'open' ? openOrders : historyOrders).map(order => (
+                  <tr key={order.id} className="hover:bg-trading-black transition-colors">
+                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.price}</td>
+                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</td>
+                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{activeTab === 'open' ? (order.side === 0 ? 'BUY' : 'SELL') : order.status}</td>
+                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.createdAt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(activeTab === 'open' ? openOrders : historyOrders).length === 0 && (
+              <div className="text-center text-gray-400 py-4">No {activeTab === 'open' ? 'open' : 'history'} orders.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column: Order Book / Open Orders */}
+      <div className="col-span-12 lg:col-span-4 grid grid-cols-1 gap-3">
+        {/* Combined Order Book Section (Vertical Layout) */}
+        <div className="bg-trading-gray rounded-lg p-3 mt-3">
+          {/* Sell Orders Section */}
+          <div>
+            <div className="flex justify-between text-xs text-gray-400 mb-1 px-1">
+              <span>Price</span>
+              <span>Size</span>
+              <span>Total</span>
+            </div>
+            <div className="grid grid-rows-5">
+              {(() => {
+                const rows = [];
+                const emptyCount = 5 - aggregatedSellOrdersWithTotal.length;
+                // For sell orders, align orders at the bottom by rendering empty rows first
+                for (let i = 0; i < emptyCount; i++) {
+                  rows.push(<div key={`empty-sell-${i}`} className="h-6" />);
+                }
+                for (const order of aggregatedSellOrdersWithTotal) {
+                  rows.push(
+                    <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
+                      <span>{Number.parseFloat(order.price).toFixed(2)}</span>
+                      <span>{order.size.toFixed(2)}</span>
+                      <span>{order.total.toFixed(2)}</span>
+                    </div>
+                  );
+                }
+                return rows;
+              })()}
+            </div>
+          </div>
+
+          {/* 最新約定価格表示セクション */}
+          <div className="my-2 text-center text-lg text-white bg-trading-light py-1 rounded">
+            {latestPrice ? Number.parseFloat(latestPrice).toFixed(2) : "--"} {selectedPair.quote}
+          </div>
+
+          {/* Buy Orders Section */}
+          <div>
+            <div className="grid grid-rows-5">
+              {(() => {
+                const rows = [];
+                // For buy orders, align orders at the top by rendering orders first
+                for (const order of aggregatedBuyOrdersWithTotal) {
+                  rows.push(
+                    <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
+                      <span>{Number.parseFloat(order.price).toFixed(2)}</span>
+                      <span>{order.size.toFixed(2)}</span>
+                      <span>{order.total.toFixed(2)}</span>
+                    </div>
+                  );
+                }
+                const emptyCount = 5 - aggregatedBuyOrdersWithTotal.length;
+                for (let i = 0; i < emptyCount; i++) {
+                  rows.push(<div key={`empty-buy-${i}`} className="h-6" />);
+                }
+                return rows;
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* New: Place Order Block added to Right Column */}
+        <div className="bg-trading-gray rounded-lg p-3 mt-3">
           <div className="flex gap-2 mb-3">
             <button
               type="button"
@@ -731,7 +841,6 @@ export default function TradingPage() {
               Sell
             </button>
           </div>
-
           {/* Order Type Selector */}
           <div className="flex gap-2 mb-3">
             <button
@@ -753,10 +862,10 @@ export default function TradingPage() {
               Limit
             </button>
           </div>
-
           <div className="space-y-3">
             {orderType === "market" ? (
               <div className="space-y-3">
+                {/* Market Order inputs (replica of the ones removed from left column) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="market-price-input" className="block text-xs font-medium text-gray-400 mb-1">
@@ -781,17 +890,17 @@ export default function TradingPage() {
                     />
                     {marketPriceError && <p className="text-xs text-red-500">{marketPriceError}</p>}
                   </div>
-                <div>
-                  <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                    Amount ({selectedPair.base})
-                  </label>
-                  <input
-                    id="market-amount-input"
-                    type="number"
+                  <div>
+                    <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
+                      Amount ({selectedPair.base})
+                    </label>
+                    <input
+                      id="market-amount-input"
+                      type="number"
                       step="0.000001"
-                    className="trading-input"
-                    placeholder="0.00"
-                    value={marketAmount}
+                      className="trading-input"
+                      placeholder="0.00"
+                      value={marketAmount}
                       onChange={(e) => {
                         const value = e.target.value;
                         setMarketAmount(value);
@@ -803,7 +912,7 @@ export default function TradingPage() {
                       }}
                     />
                     {marketAmountError && <p className="text-xs text-red-500">{marketAmountError}</p>}
-                </div>
+                  </div>
                 </div>
                 <div className="text-xs text-gray-400">
                   Estimated Total: <span className="text-white">
@@ -894,111 +1003,34 @@ export default function TradingPage() {
               </button>
             )}
           </div>
-        </div>
 
-        {/* Cancel Order Form */}
-        <div className="bg-trading-gray rounded-lg p-3 mt-3">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Cancel Order</h2>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="cancel-order-input" className="block text-xs font-medium text-gray-400 mb-1">
-                Order ID
-              </label>
-              <input
-                id="cancel-order-input"
-                type="number"
-                className="trading-input"
-                placeholder="0"
-                value={cancelOrderId}
-                onChange={(e) => setCancelOrderId(e.target.value)}
-              />
-            </div>
+          {/* New: Cancel Order Block added to Right Column */}
+          <div className="bg-trading-gray rounded-lg p-3 mt-3">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Cancel Order</h2>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="cancel-order-input-right" className="block text-xs font-medium text-gray-400 mb-1">
+                  Order ID
+                </label>
+                <input
+                  id="cancel-order-input-right"
+                  type="number"
+                  className="trading-input"
+                  placeholder="0"
+                  value={cancelOrderId}
+                  onChange={(e) => setCancelOrderId(e.target.value)}
+                />
+              </div>
               <button
                 type="button"
-              onClick={handleCancelOrder}
+                onClick={handleCancelOrder}
                 disabled={isLoading}
-              className="w-full py-2 bg-red-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
+                className="w-full py-2 bg-red-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
               >
-              {isLoading ? "Processing..." : "Cancel Order"}
+                {isLoading ? "Processing..." : "Cancel Order"}
               </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Column: Order Book / Open Orders */}
-      <div className="col-span-12 lg:col-span-4 grid grid-cols-1 gap-3">
-        {/* Combined Order Book Section (Vertical Layout) */}
-        <div className="bg-trading-gray rounded-lg p-3 mt-3">
-          {/* Sell Orders Section */}
-          <div>
-          <div className="flex justify-between text-xs text-gray-400 mb-1 px-1">
-            <span>Price</span>
-            <span>Size</span>
-            <span>Total</span>
-          </div>
-            {aggregatedSellOrdersWithTotal.length > 0 ? (
-              aggregatedSellOrdersWithTotal.map((order) => (
-                <div key={order.price} className="flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
-                  <span>{Number.parseFloat(order.price).toFixed(2)}</span>
-                  <span>{order.size.toFixed(2)}</span>
-                  <span>{order.total.toFixed(2)}</span>
             </div>
-              ))
-            ) : (
-              <div className="text-center text-xs text-gray-400">No sell orders available</div>
-            )}
           </div>
-
-          {/* 最新約定価格表示セクション */}
-          <div className="my-2 text-center text-lg text-white bg-trading-light py-1 rounded">
-            {latestPrice ? Number.parseFloat(latestPrice).toFixed(2) : "--"} {selectedPair.quote}
-          </div>
-
-          {/* Buy Orders Section */}
-          <div>
-            {aggregatedBuyOrdersWithTotal.length > 0 ? (
-              aggregatedBuyOrdersWithTotal.map((order) => (
-                <div key={order.price} className="flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
-                  <span>{Number.parseFloat(order.price).toFixed(2)}</span>
-                  <span>{order.size.toFixed(2)}</span>
-                  <span>{order.total.toFixed(2)}</span>
-            </div>
-              ))
-            ) : (
-              <div className="text-center text-xs text-gray-400">No buy orders available</div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <h2 className="text-xl font-bold mb-4">MY OPEN ORDERS</h2>
-          {openOrders.length > 0 ? (
-            openOrders.map(order => (
-              <div key={order.id} className="mb-4 p-4 bg-trading-light rounded">
-                <div>Price: {order.price}</div>
-                <div>Amount: {order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</div>
-                <div>Date: {order.createdAt}</div>
-              </div>
-            ))
-          ) : (
-            <div>No open orders.</div>
-          )}
-        </div>
-
-        <div className="mt-8">
-          <h2 className="text-xl font-bold mb-4">History</h2>
-          {historyOrders.length > 0 ? (
-            historyOrders.map(order => (
-              <div key={order.id} className="mb-4 p-4 bg-trading-light rounded">
-                <div>Price: {order.price}</div>
-                <div>Amount: {order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</div>
-                <div>Status: {order.status}</div>
-                <div>Date: {order.createdAt}</div>
-              </div>
-            ))
-          ) : (
-            <div>No history orders.</div>
-          )}
         </div>
       </div>
 
