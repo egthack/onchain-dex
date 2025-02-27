@@ -105,6 +105,13 @@ export default function TradingPage() {
   // latestPrice stateを追加
   const [latestPrice, setLatestPrice] = useState("");
 
+  // Add new state variable for orders at the beginning of the component (after other state declarations)
+  const [myOrders, setMyOrders] = useState<Order[]>([]);
+
+  // Compute open orders and history orders
+  const openOrders = myOrders.filter(order => order.status === 'OPEN');
+  const historyOrders = myOrders.filter(order => order.status !== 'OPEN');
+
   // トークンシンボルからデシマル値を取得する関数
   const getTokenDecimals = useCallback((symbol: string): number => {
     return TOKEN_DECIMALS[symbol as keyof typeof TOKEN_DECIMALS] || 18; // デフォルトは18
@@ -233,7 +240,7 @@ export default function TradingPage() {
         const result = await response.json();
         if (result.data?.orders) {
           setBuyOrderBook(result.data.orders.slice(0, 20));
-        } else {
+      } else {
           console.error('Invalid data format for buy orders', result);
         }
       } catch (error) {
@@ -330,7 +337,7 @@ export default function TradingPage() {
           const price = result.data.orders[0].price;
           console.log("Last filled order price:", price);
           setLatestPrice(price);
-        } else {
+      } else {
           console.error("No filled orders found", result);
           setLatestPrice("");
         }
@@ -405,8 +412,8 @@ export default function TradingPage() {
         }
         if (!marketPrice || marketPrice === "0") {
           setError("Please enter the price");
-          setIsLoading(false);
-          return;
+            setIsLoading(false);
+            return;
         }
         amountBN = BigInt(Math.floor(Number.parseFloat(marketAmount) * 1000000));
         priceBN = BigInt(Math.floor(Number.parseFloat(marketPrice) * 100));
@@ -471,7 +478,7 @@ export default function TradingPage() {
         setModalOpen(true);
       } else {
         setError("");
-        setTxHash(hash);
+      setTxHash(hash);
         setModalOpen(true);
         console.log("Order placed successfully via TradingVault");
         fetchDepositBalance();
@@ -584,6 +591,57 @@ export default function TradingPage() {
       return { ...item, total: cum };
     });
   }, [aggregatedBuyOrders]);
+
+  // Wrap fetchMyOrders in useCallback:
+  const fetchMyOrders = useCallback(async () => {
+    if (!address) return;
+    try {
+      const query = `
+        query MyQuery {
+          orders(
+            orderDirection: desc,
+            where: {
+              user_: { id: "${address?.toLowerCase()}" },
+              baseToken_: { symbol: "${selectedPair.base}" },
+              quoteToken_: { symbol: "${selectedPair.quote}" }
+            }
+          ) {
+            price
+            side
+            status
+            lockedAmount
+            baseToken { symbol }
+            quoteToken { symbol }
+            filledAt
+            cancelledAt
+            createdAt
+            user { id }
+          }
+        }
+      `;
+      const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query })
+      });
+      const result = await response.json();
+      if (result.data?.orders) {
+        console.log("result.data.orders", result.data.orders);
+        setMyOrders(result.data.orders);
+      } else {
+        console.error("No orders found", result);
+      }
+    } catch (err) {
+      console.error("Error fetching orders", err);
+    }
+  }, [address, selectedPair]);
+
+  // Update useEffect to depend on fetchMyOrders
+  useEffect(() => {
+    fetchMyOrders();
+    const interval = setInterval(fetchMyOrders, 10000); // polling every 10 seconds
+    return () => clearInterval(interval);
+  }, [fetchMyOrders]);
 
   return (
     <div className="grid grid-cols-12 gap-3">
@@ -723,17 +781,17 @@ export default function TradingPage() {
                     />
                     {marketPriceError && <p className="text-xs text-red-500">{marketPriceError}</p>}
                   </div>
-                  <div>
-                    <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                      Amount ({selectedPair.base})
-                    </label>
-                    <input
-                      id="market-amount-input"
-                      type="number"
+                <div>
+                  <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
+                    Amount ({selectedPair.base})
+                  </label>
+                  <input
+                    id="market-amount-input"
+                    type="number"
                       step="0.000001"
-                      className="trading-input"
-                      placeholder="0.00"
-                      value={marketAmount}
+                    className="trading-input"
+                    placeholder="0.00"
+                    value={marketAmount}
                       onChange={(e) => {
                         const value = e.target.value;
                         setMarketAmount(value);
@@ -745,7 +803,7 @@ export default function TradingPage() {
                       }}
                     />
                     {marketAmountError && <p className="text-xs text-red-500">{marketAmountError}</p>}
-                  </div>
+                </div>
                 </div>
                 <div className="text-xs text-gray-400">
                   Estimated Total: <span className="text-white">
@@ -855,14 +913,14 @@ export default function TradingPage() {
                 onChange={(e) => setCancelOrderId(e.target.value)}
               />
             </div>
-            <button
-              type="button"
+              <button
+                type="button"
               onClick={handleCancelOrder}
-              disabled={isLoading}
+                disabled={isLoading}
               className="w-full py-2 bg-red-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-            >
+              >
               {isLoading ? "Processing..." : "Cancel Order"}
-            </button>
+              </button>
           </div>
         </div>
       </div>
@@ -912,31 +970,35 @@ export default function TradingPage() {
           </div>
         </div>
 
-        {/* Open Orders Section remains unchanged */}
-        <div className="bg-trading-gray rounded-lg p-3">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Open Orders</h2>
-          <div className="space-y-2">
-            <div className="bg-trading-light rounded p-2 text-xs">
-              <div className="flex justify-between mb-1">
-                <span className="text-accent-green font-medium">Buy {selectedPair.base}</span>
-                <span className="text-gray-400">2 min ago</span>
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4">MY OPEN ORDERS</h2>
+          {openOrders.length > 0 ? (
+            openOrders.map(order => (
+              <div key={order.id} className="mb-4 p-4 bg-trading-light rounded">
+                <div>Price: {order.price}</div>
+                <div>Amount: {order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</div>
+                <div>Date: {order.createdAt}</div>
               </div>
-              <div className="flex justify-between text-gray-300">
-                <span>1,840.23 {selectedPair.quote}</span>
-                <span>0.5 {selectedPair.base}</span>
+            ))
+          ) : (
+            <div>No open orders.</div>
+          )}
+        </div>
+
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4">History</h2>
+          {historyOrders.length > 0 ? (
+            historyOrders.map(order => (
+              <div key={order.id} className="mb-4 p-4 bg-trading-light rounded">
+                <div>Price: {order.price}</div>
+                <div>Amount: {order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</div>
+                <div>Status: {order.status}</div>
+                <div>Date: {order.createdAt}</div>
               </div>
-            </div>
-            <div className="bg-trading-light rounded p-2 text-xs">
-              <div className="flex justify-between mb-1">
-                <span className="text-red-400 font-medium">Sell {selectedPair.base}</span>
-                <span className="text-gray-400">5 min ago</span>
-              </div>
-              <div className="flex justify-between text-gray-300">
-                <span>1,845.12 {selectedPair.quote}</span>
-                <span>0.3 {selectedPair.base}</span>
-              </div>
-            </div>
-          </div>
+            ))
+          ) : (
+            <div>No history orders.</div>
+          )}
         </div>
       </div>
 
