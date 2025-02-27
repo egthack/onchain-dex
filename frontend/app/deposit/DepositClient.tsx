@@ -5,6 +5,7 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../../abi/ITradingVault.json";
 import ERC20ABI from "../../abi/IERC20.json";
 import env from "../../env.json";
+import Link from "next/link";
 
 const TOKENS = ["USDC", "WETH", "WBTC", "POL"];
 
@@ -253,16 +254,6 @@ export default function DepositClient() {
         ))}
       </div>
 
-      {/* Display wallet balance */}
-      <div className="mb-4 text-white">
-        Wallet balance: {formatTokenUnits(walletBalance, getTokenDecimals(selectedToken))} {selectedToken}
-      </div>
-
-      {/* Display current balance */}
-      <div className="mb-4 text-white">
-        Current deposit balance: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
-      </div>
-
       {error && <p className="mb-4 text-red-500">{error}</p>}
 
       {/* Action Selector */}
@@ -287,6 +278,17 @@ export default function DepositClient() {
         /* Deposit Form */
         <div className="bg-trading-gray rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3">Deposit {selectedToken}</h2>
+
+          {/* Display current balance */}
+          <div className="mb-4 text-white">
+            Current deposit balance: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
+          </div>
+
+          {/* Display wallet balance with yellow color if 0 */}
+          <div className={`mb-4 ${walletBalance === BigInt(0) ? "text-yellow-500" : "text-white"}`}>
+            Wallet balance: {formatTokenUnits(walletBalance, getTokenDecimals(selectedToken))} {selectedToken}
+          </div>
+
           <div className="mb-3">
             <label htmlFor="deposit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Deposit Amount ({selectedToken})</label>
             <input
@@ -301,24 +303,35 @@ export default function DepositClient() {
                 setIsApproved(false); // reset approval if amount changes
               }}
             />
-            {!isApproved ? (
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={isLoading || !amount || amount === "0"}
-                className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "Processing..." : "Approve"}
-              </button>
+            {walletBalance === BigInt(0) ? (
+              <Link href="/faucet">
+                <button
+                  type="button"
+                  className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
+                >
+                  Faucet
+                </button>
+              </Link>
             ) : (
-              <button
-                type="button"
-                onClick={handleDeposit}
-                disabled={isLoading || !amount || amount === "0"}
-                className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "Processing..." : "Deposit"}
-              </button>
+              !isApproved ? (
+                <button
+                  type="button"
+                  onClick={handleApprove}
+                  disabled={isLoading || !amount || amount === "0"}
+                  className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
+                >
+                  {isLoading ? "Processing..." : "Approve"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDeposit}
+                  disabled={isLoading || !amount || amount === "0"}
+                  className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+                >
+                  {isLoading ? "Processing..." : "Deposit"}
+                </button>
+              )
             )}
           </div>
         </div>
@@ -326,6 +339,12 @@ export default function DepositClient() {
         /* Withdraw Form */
         <div className="bg-trading-gray rounded-lg p-4">
           <h2 className="text-lg font-semibold mb-3">Withdraw {selectedToken}</h2>
+
+          {/* Display current balance */}
+          <div className="mb-4 text-white">
+            Current deposit balance: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
+          </div>
+          
           <div className="mb-3">
             <label htmlFor="withdraw-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Withdraw Amount ({selectedToken})</label>
             <input
