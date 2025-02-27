@@ -72,22 +72,22 @@ async function main() {
   const wbtcAddress = deployment.contracts.tokens.WBTC;
   const polAddress = deployment.contracts.tokens.POL;
   // WETH: 例として最大10トークンを設定（WETHは18桁）
-  const txWETH = await faucetContract.setMaxTokenAmount(wethAddress, ethers.parseUnits("100", 18));
+  const txWETH = await faucetContract.setMaxTokenAmount(wethAddress, ethers.parseUnits("1000000000000", 18));
   await txWETH.wait();
-  console.log("Set maxTokenAmount for WETH to 100 tokens");
+  console.log("Set maxTokenAmount for WETH to 1000000000000 tokens");
 
   // USDC: 例として最大10000トークンを設定（USDCは6桁）
-  const txUSDC = await faucetContract.setMaxTokenAmount(usdcAddress, ethers.parseUnits("10000", 6));
+  const txUSDC = await faucetContract.setMaxTokenAmount(usdcAddress, ethers.parseUnits("1000000000000", 6));
   await txUSDC.wait();
-  console.log("Set maxTokenAmount for USDC to 10000 tokens");
+  console.log("Set maxTokenAmount for USDC to 1000000000000 tokens");
 
-  const txWBTC = await faucetContract.setMaxTokenAmount(wbtcAddress, ethers.parseUnits("10", 8));
+  const txWBTC = await faucetContract.setMaxTokenAmount(wbtcAddress, ethers.parseUnits("1000000000000", 8));
   await txWBTC.wait();
-  console.log("Set maxTokenAmount for WBTC to 10 tokens");
+  console.log("Set maxTokenAmount for WBTC to 1000000000000 tokens");
 
-  const txPOL = await faucetContract.setMaxTokenAmount(polAddress, ethers.parseUnits("1000", 18));
+  const txPOL = await faucetContract.setMaxTokenAmount(polAddress, ethers.parseUnits("1000000000000", 18));
   await txPOL.wait();
-  console.log("Set maxTokenAmount for POL to 1000 tokens");
+  console.log("Set maxTokenAmount for POL to 1000000000000 tokens");
 }
 
 main().catch((error) => {

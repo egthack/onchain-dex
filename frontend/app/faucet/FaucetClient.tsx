@@ -10,25 +10,25 @@ const SUPPORTED_TOKENS = [
     symbol: "USDC",
     name: "USD Coin",
     decimals: 6,
-    amount: "10000",
+    amount: "1000000000000",
   },
   {
     symbol: "WETH",
     name: "Wrapped ETH",
     decimals: 18,
-    amount: "100",
+    amount: "1000000000000",
   },
   {
     symbol: "WBTC",
     name: "Wrapped BTC",
     decimals: 8,
-    amount: "10",
+    amount: "1000000000000",
   },
   {
     symbol: "POL",
     name: "Polaris Token",
     decimals: 18,
-    amount: "1000",
+    amount: "1000000000000",
   }
 ];
 
@@ -121,7 +121,7 @@ export default function FaucetClient() {
                 {selectedToken.amount} {selectedToken.symbol}
               </div>
               <div className="text-sm text-gray-400 mt-1">
-                Available every 24 hours per address
+                Available every 1 hours per address
               </div>
             </div>
           </div>
