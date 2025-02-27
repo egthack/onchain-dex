@@ -3,6 +3,7 @@ import {
   Deposit as DepositEvent,
   Withdrawal as WithdrawalEvent,
   OrderCancelled as OrderCancelledEvent,
+  TradingVault
 } from "../generated/TradingVault/TradingVault";
 import {
   User,
@@ -12,8 +13,14 @@ import {
   Withdrawal,
   Order,
 } from "../generated/schema";
+import { fetchTokenInfo } from "./mockerc20";
+import { initializeKnownTokens } from "./init";
 
+// このマッピングファイルがロードされた時に実行される関数
 export function handleDeposit(event: DepositEvent): void {
+  // 既知のトークン情報を初期化
+  initializeKnownTokens();
+  
   let userId = event.params.user.toHexString();
   let tokenId = event.params.token.toHexString();
   let balanceId = userId + "-" + tokenId;
@@ -38,6 +45,9 @@ export function handleDeposit(event: DepositEvent): void {
   }
   token.totalVolume = token.totalVolume.plus(event.params.amount);
   token.save();
+  
+  // トークン情報の取得
+  fetchTokenInfo(event.params.token);
 
   // 残高の取得または作成
   let balance = Balance.load(balanceId);
@@ -64,6 +74,9 @@ export function handleDeposit(event: DepositEvent): void {
 }
 
 export function handleWithdrawal(event: WithdrawalEvent): void {
+  // 既知のトークン情報を初期化
+  initializeKnownTokens();
+  
   let userId = event.params.user.toHexString();
   let tokenId = event.params.token.toHexString();
   let balanceId = userId + "-" + tokenId;
@@ -88,6 +101,9 @@ export function handleWithdrawal(event: WithdrawalEvent): void {
   }
   token.totalVolume = token.totalVolume.plus(event.params.amount);
   token.save();
+  
+  // トークン情報の取得
+  fetchTokenInfo(event.params.token);
 
   // 残高の更新
   let balance = Balance.load(balanceId);

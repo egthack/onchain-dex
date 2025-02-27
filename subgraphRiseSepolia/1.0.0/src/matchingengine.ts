@@ -9,8 +9,13 @@ import {
   Token,
   Order
 } from "../generated/schema";
+import { fetchTokenInfo } from "./mockerc20";
+import { initializeKnownTokens } from "./init";
 
 export function handleOrderPlaced(event: OrderPlacedEvent): void {
+  // 既知のトークン情報を初期化
+  initializeKnownTokens();
+  
   let orderId = event.params.orderId.toString();
   let userId = event.params.user.toHexString();
   let baseTokenId = event.params.base.toHexString();
@@ -34,6 +39,9 @@ export function handleOrderPlaced(event: OrderPlacedEvent): void {
     baseToken.totalVolume = BigInt.fromI32(0);
     baseToken.save();
   }
+  
+  // ベーストークン情報の取得
+  fetchTokenInfo(event.params.base);
 
   // クォートトークンの取得または作成
   let quoteToken = Token.load(quoteTokenId);
@@ -42,6 +50,9 @@ export function handleOrderPlaced(event: OrderPlacedEvent): void {
     quoteToken.totalVolume = BigInt.fromI32(0);
     quoteToken.save();
   }
+  
+  // クォートトークン情報の取得
+  fetchTokenInfo(event.params.quote);
 
   // 注文の作成
   let order = new Order(orderId);
@@ -61,6 +72,9 @@ export function handleOrderPlaced(event: OrderPlacedEvent): void {
 }
 
 export function handleTradeExecuted(event: TradeExecutedEvent): void {
+  // 既知のトークン情報を初期化
+  initializeKnownTokens();
+  
   let makerOrderId = event.params.makerOrderId.toString();
   let takerOrderId = event.params.takerOrderId.toString();
   
@@ -108,15 +122,24 @@ export function handleTradeExecuted(event: TradeExecutedEvent): void {
     baseToken.save();
   }
   
+  // ベーストークン情報の取得
+  fetchTokenInfo(event.params.base);
+  
   let quoteToken = Token.load(quoteTokenId);
   if (quoteToken != null) {
     let tradeValue = event.params.price.times(event.params.amount);
     quoteToken.totalVolume = quoteToken.totalVolume.plus(tradeValue);
     quoteToken.save();
   }
+  
+  // クォートトークン情報の取得
+  fetchTokenInfo(event.params.quote);
 }
 
 export function handlePairAdded(event: PairAddedEvent): void {
+  // 既知のトークン情報を初期化
+  initializeKnownTokens();
+  
   let baseTokenId = event.params.base.toHexString();
   let quoteTokenId = event.params.quote.toHexString();
   
@@ -129,6 +152,9 @@ export function handlePairAdded(event: PairAddedEvent): void {
     baseToken.save();
   }
   
+  // ベーストークン情報の取得
+  fetchTokenInfo(event.params.base);
+  
   // クォートトークンの取得または作成
   let quoteToken = Token.load(quoteTokenId);
   if (quoteToken == null) {
@@ -137,4 +163,7 @@ export function handlePairAdded(event: PairAddedEvent): void {
     quoteToken.decimals = event.params.decimals[1].toI32();
     quoteToken.save();
   }
-} 
+  
+  // クォートトークン情報の取得
+  fetchTokenInfo(event.params.quote);
+}
