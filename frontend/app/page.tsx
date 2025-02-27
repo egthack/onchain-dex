@@ -1,10 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../abi/ITradingVault.json";
 import * as ethers from "ethers";
 import env from "../env.json";
+
+interface Order {
+  id: string;
+  price: string;
+  side: number;
+  status: string;
+  createdAt: string;
+  lockedAmount: string;
+  baseToken: { symbol: string };
+  quoteToken: { symbol: string };
+}
 
 const TRADING_PAIRS = [
   { base: "WETH", quote: "USDC" },
@@ -30,6 +41,29 @@ const TOKEN_DECIMALS = {
 const VAULT_ADDRESS = (env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 
 const vaultAbi = TradingVaultABI.abi;
+
+interface TradingViewWidgetOptions {
+  autosize: boolean;
+  symbol: string;
+  interval: string;
+  timezone: string;
+  theme: string;
+  style: string;
+  locale: string;
+  toolbar_bg: string;
+  enable_publishing: boolean;
+  hide_side_toolbar: boolean;
+  allow_symbol_change: boolean;
+  container_id: string;
+}
+
+declare global {
+  interface Window {
+    TradingView?: {
+      widget(options: TradingViewWidgetOptions): void;
+    };
+  }
+}
 
 export default function TradingPage() {
   const { address, isConnected } = useAccount();
@@ -62,6 +96,13 @@ export default function TradingPage() {
   const [limitAmountError, setLimitAmountError] = useState("");
 
   const [balanceWarning, setBalanceWarning] = useState("");
+
+  // Add new states for buy and sell order books
+  const [buyOrderBook, setBuyOrderBook] = useState<Order[]>([]);
+  const [sellOrderBook, setSellOrderBook] = useState<Order[]>([]);
+
+  // latestPrice stateを追加
+  const [latestPrice, setLatestPrice] = useState("");
 
   // トークンシンボルからデシマル値を取得する関数
   const getTokenDecimals = useCallback((symbol: string): number => {
@@ -153,6 +194,181 @@ export default function TradingPage() {
     }
     setBalanceWarning(warning);
   }, [orderType, side, marketAmount, marketPrice, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
+
+  // Updated Buy Orders fetching hook
+  useEffect(() => {
+    async function fetchBuyOrderBook() {
+      try {
+        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `
+              query BuyOrders {
+                orders(
+                  where: { 
+                    status: "OPEN", 
+                    side: 0, 
+                    baseToken_: { symbol: "${selectedPair.base}" }, 
+                    quoteToken_: { symbol: "${selectedPair.quote}" }
+                  }
+                  orderBy: price
+                  orderDirection: desc
+                  first: 20
+                ) {
+                  id
+                  price
+                  side
+                  status
+                  createdAt
+                  lockedAmount
+                  baseToken { symbol }
+                  quoteToken { symbol }
+                }
+              }
+            `
+          })
+        });
+        const result = await response.json();
+        console.log("Buy orders:", result.data.orders);
+        if (result.data?.orders) {
+          setBuyOrderBook(result.data.orders.slice(0, 20));
+        } else {
+          console.error('Invalid data format for buy orders', result);
+        }
+      } catch (error) {
+        console.error('Failed to fetch buy orders:', error);
+      }
+    }
+    fetchBuyOrderBook();
+    const interval = setInterval(fetchBuyOrderBook, 2000);
+    return () => clearInterval(interval);
+  }, [selectedPair]);
+
+  // Updated Sell Orders fetching hook
+  useEffect(() => {
+    async function fetchSellOrderBook() {
+      try {
+        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `
+              query SellOrders {
+                orders(
+                  where: { 
+                    status: "OPEN", 
+                    side: 1, 
+                    baseToken_: { symbol: "${selectedPair.base}" }, 
+                    quoteToken_: { symbol: "${selectedPair.quote}" }
+                  }
+                  orderBy: price
+                  orderDirection: asc
+                  first: 20
+                ) {
+                  id
+                  price
+                  side
+                  status
+                  createdAt
+                  lockedAmount
+                  baseToken { symbol }
+                  quoteToken { symbol }
+                }
+              }
+            `
+          })
+        });
+        const result = await response.json();
+        if (result.data?.orders) {
+          setSellOrderBook(result.data.orders.slice(0, 20));
+        } else {
+          console.error('Invalid data format for sell orders', result);
+        }
+      } catch (error) {
+        console.error('Failed to fetch sell orders:', error);
+      }
+    }
+    fetchSellOrderBook();
+    const interval = setInterval(fetchSellOrderBook, 2000);
+    return () => clearInterval(interval);
+  }, [selectedPair]);
+
+  // 修正: useEffectフックをselectedPair依存にして、クエリに通貨ペアのフィルタを追加する
+  useEffect(() => {
+    async function fetchLastFilledOrder() {
+      try {
+        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            query: `
+              query MyQuery {
+                orders(
+                  orderBy: filledAt,
+                  orderDirection: desc,
+                  where: {
+                    status: FILLED,
+                    baseToken_: { symbol: "${selectedPair.base}" },
+                    quoteToken_: { symbol: "${selectedPair.quote}" }
+                  },
+                  first: 1
+                ) {
+                  price
+                  side
+                  status
+                  baseToken { symbol }
+                  quoteToken { symbol }
+                  filledAt
+                }
+              }
+            `
+          })
+        });
+        const result = await response.json();
+        if (result.data?.orders?.length > 0) {
+          const price = result.data.orders[0].price;
+          console.log("Last filled order price:", price);
+          setLatestPrice(price);
+        } else {
+          console.error("No filled orders found", result);
+          setLatestPrice("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch last filled order:", error);
+        setLatestPrice("");
+      }
+    }
+
+    fetchLastFilledOrder();
+    const interval = setInterval(fetchLastFilledOrder, 2000);
+    return () => clearInterval(interval);
+  }, [selectedPair]);
+
+  /* NEW: Initialize TradingView chart based on selectedPair */
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.TradingView) {
+      const pair = `${selectedPair.base}${selectedPair.quote}`;
+      const container = document.getElementById('tradingview_chart');
+      if (container) {
+        container.innerHTML = '';
+        window.TradingView.widget({
+          autosize: true,
+          symbol: `BINANCE:${pair}`,
+          interval: 'D',
+          timezone: 'Asia/Tokyo',
+          theme: document.body.classList.contains('light') ? 'light' : 'dark',
+          style: '1',
+          locale: 'ja',
+          toolbar_bg: '#f1f3f6',
+          enable_publishing: false,
+          hide_side_toolbar: false,
+          allow_symbol_change: true,
+          container_id: 'tradingview_chart'
+        });
+      }
+    }
+  }, [selectedPair]);
 
   async function handlePlaceOrder() {
     setError("");
@@ -311,6 +527,60 @@ export default function TradingPage() {
       setIsLoading(false);
     }
   }
+
+  // Group and aggregate sell orders by price
+  const aggregatedSellOrders = useMemo(() => {
+    const groups: Record<string, { price: string, size: number }> = {};
+    for (const order of sellOrderBook) {
+      const price = order.price;
+      const size = Number.parseFloat(order.lockedAmount);
+      if (groups[price]) {
+        groups[price].size += size;
+      } else {
+        groups[price] = { price, size };
+      }
+    }
+    // Sort in ascending order of price so that cumulative totals are computed from the cheapest order upward
+    const sorted = Object.values(groups).sort((a, b) => Number.parseFloat(a.price) - Number.parseFloat(b.price)).reverse().slice(0, 10);
+    return sorted;
+  }, [sellOrderBook]);
+
+  // Compute cumulative total for sell orders (reversed cumulative sum)
+  const aggregatedSellOrdersWithTotal = useMemo(() => {
+    const result: Array<{ price: string; size: number; total: number }> = aggregatedSellOrders.map(order => ({ ...order, total: 0 }));
+    let cum = 0;
+    for (let i = result.length - 1; i >= 0; i--) {
+      cum += result[i].size;
+      result[i].total = cum;
+    }
+    return result;
+  }, [aggregatedSellOrders]);
+
+  // Group and aggregate buy orders by price
+  const aggregatedBuyOrders = useMemo(() => {
+    const groups: Record<string, { price: string, size: number }> = {};
+    for (const order of buyOrderBook) {
+      const price = order.price;
+      const size = Number.parseFloat(order.lockedAmount);
+      if (groups[price]) {
+        groups[price].size += size;
+      } else {
+        groups[price] = { price, size };
+      }
+    }
+    // For buy orders, sort in descending order of price
+    const sorted = Object.values(groups).sort((a, b) => Number.parseFloat(b.price) - Number.parseFloat(a.price));
+    return sorted.slice(0, 10);
+  }, [buyOrderBook]);
+
+  // Compute cumulative total for buy orders
+  const aggregatedBuyOrdersWithTotal = useMemo(() => {
+    let cum = 0;
+    return aggregatedBuyOrders.map(item => {
+      cum += item.size;
+      return { ...item, total: cum };
+    });
+  }, [aggregatedBuyOrders]);
 
   return (
     <div className="grid grid-cols-12 gap-3">
@@ -573,44 +843,50 @@ export default function TradingPage() {
 
       {/* Right Column: Order Book / Open Orders */}
       <div className="col-span-12 lg:col-span-4 grid grid-cols-1 gap-3">
-        {/* Order Book */}
-        <div className="bg-trading-gray rounded-lg p-3">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Order Book</h2>
+        {/* Combined Order Book Section (Vertical Layout) */}
+        <div className="bg-trading-gray rounded-lg p-3 mt-3">
+          {/* Sell Orders Section */}
+          <div>
           <div className="flex justify-between text-xs text-gray-400 mb-1 px-1">
             <span>Price</span>
             <span>Size</span>
             <span>Total</span>
           </div>
-          <div className="space-y-0.5 mb-2 text-xs font-medium">
-            <div className="flex justify-between text-red-400 hover:bg-trading-light/50 p-1 rounded cursor-pointer">
-              <span>1,845.32</span>
-              <span>0.5432</span>
-              <span>1,002.43</span>
+            {aggregatedSellOrdersWithTotal.length > 0 ? (
+              aggregatedSellOrdersWithTotal.map((order) => (
+                <div key={order.price} className="flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
+                  <span>{Number.parseFloat(order.price).toFixed(2)}</span>
+                  <span>{order.size.toFixed(2)}</span>
+                  <span>{order.total.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-red-400 hover:bg-trading-light/50 p-1 rounded cursor-pointer">
-              <span>1,844.21</span>
-              <span>0.8923</span>
-              <span>1,645.87</span>
-            </div>
+              ))
+            ) : (
+              <div className="text-center text-xs text-gray-400">No sell orders available</div>
+            )}
           </div>
-          <div className="text-center py-1.5 text-sm font-bold text-accent-green border-y border-trading-light">
-            1,842.32 {selectedPair.quote}
+
+          {/* 最新約定価格表示セクション */}
+          <div className="my-2 text-center text-lg text-white bg-trading-light py-1 rounded">
+            {latestPrice ? Number.parseFloat(latestPrice).toFixed(2) : "--"} {selectedPair.quote}
           </div>
-          <div className="space-y-0.5 mt-2 text-xs font-medium">
-            <div className="flex justify-between text-accent-green hover:bg-trading-light/50 p-1 rounded cursor-pointer">
-              <span>1,841.23</span>
-              <span>0.7654</span>
-              <span>1,409.87</span>
+
+          {/* Buy Orders Section */}
+          <div>
+            {aggregatedBuyOrdersWithTotal.length > 0 ? (
+              aggregatedBuyOrdersWithTotal.map((order) => (
+                <div key={order.price} className="flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
+                  <span>{Number.parseFloat(order.price).toFixed(2)}</span>
+                  <span>{order.size.toFixed(2)}</span>
+                  <span>{order.total.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-accent-green hover:bg-trading-light/50 p-1 rounded cursor-pointer">
-              <span>1,840.11</span>
-              <span>1.1234</span>
-              <span>2,067.54</span>
-            </div>
+              ))
+            ) : (
+              <div className="text-center text-xs text-gray-400">No buy orders available</div>
+            )}
           </div>
         </div>
 
-        {/* Open Orders */}
+        {/* Open Orders Section remains unchanged */}
         <div className="bg-trading-gray rounded-lg p-3">
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Open Orders</h2>
           <div className="space-y-2">
