@@ -169,13 +169,13 @@ export default function TradingPage() {
         const estimatedTotal = Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice);
         const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
         if (estimatedTotal > availableUSDC) {
-          warning = "注文総額が利用可能な預入残高のUSDCを超えています";
+          warning = "Order total exceeds available USDC balance";
         }
       } else if (side === "sell" && marketAmount) {
         const amountValue = Number.parseFloat(marketAmount);
         const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
         if (amountValue > availableToken) {
-          warning = "注文数量が利用可能な預入残高を超えています";
+          warning = "Order amount exceeds available token balance";
         }
       }
     } else { // limit orders
@@ -183,13 +183,13 @@ export default function TradingPage() {
         const estimatedTotal = Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice);
         const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
         if (estimatedTotal > availableUSDC) {
-          warning = "注文総額が利用可能な預入残高のUSDCを超えています";
+          warning = "Order total exceeds available USDC balance";
         }
       } else if (side === "sell" && limitAmount) {
         const amountValue = Number.parseFloat(limitAmount);
         const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
         if (amountValue > availableToken) {
-          warning = "注文数量が利用可能な預入残高を超えています";
+          warning = "Order amount exceeds available token balance";
         }
       }
     }
@@ -816,7 +816,7 @@ export default function TradingPage() {
             {isConnected ? (
               <>
                 <div className="text-sm text-white mb-2">
-                  利用可能な預け入れ残高: {side === 'buy' ? formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")) : formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base))} {side === 'buy' ? "USDC" : selectedPair.base}
+                  Available deposit balance: {side === 'buy' ? formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")) : formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base))} {side === 'buy' ? "USDC" : selectedPair.base}
                 </div>
                 <button
                   type="button"
@@ -824,7 +824,7 @@ export default function TradingPage() {
                   disabled={isLoading}
                   className="w-full py-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
                 >
-                  {isLoading ? "処理中..." : "Place Order"}
+                  {isLoading ? "Processing..." : "Place Order"}
                 </button>
               </>
             ) : (
@@ -861,7 +861,7 @@ export default function TradingPage() {
               disabled={isLoading}
               className="w-full py-2 bg-red-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
             >
-              {isLoading ? "処理中..." : "Cancel Order"}
+              {isLoading ? "Processing..." : "Cancel Order"}
             </button>
           </div>
         </div>
