@@ -373,12 +373,12 @@ export default function TradingPage() {
     setError("");
     setTxHash("");
     if (!walletClient || !publicClient) {
-      setError("ウォレットまたはパブリッククライアントが接続されていません");
+      setError("Wallet or public client is not connected");
       setIsLoading(false);
       return;
     }
     if (!address) {
-      setError("ウォレットが接続されていません");
+      setError("Wallet not connected");
       setIsLoading(false);
       return;
     }
@@ -395,12 +395,12 @@ export default function TradingPage() {
       
       if (orderType === "market") {
         if (!marketAmount || marketAmount === "0") {
-          setError("数量を入力してください");
+          setError("Please enter the amount");
           setIsLoading(false);
           return;
         }
         if (!marketPrice || marketPrice === "0") {
-          setError("価格を入力してください");
+          setError("Please enter the price");
           setIsLoading(false);
           return;
         }
@@ -408,12 +408,12 @@ export default function TradingPage() {
         priceBN = BigInt(Math.floor(Number.parseFloat(marketPrice) * 100));
       } else {
         if (!limitAmount || limitAmount === "0") {
-          setError("数量を入力してください");
+          setError("Please enter the amount");
           setIsLoading(false);
           return;
         }
         if (!limitPrice || limitPrice === "0") {
-          setError("価格を入力してください");
+          setError("Please enter the price");
           setIsLoading(false);
           return;
         }
@@ -463,7 +463,7 @@ export default function TradingPage() {
 
       const receiptOrder = await publicClient.waitForTransactionReceipt({ hash });
       if (receiptOrder.status !== "success") {
-        setError("注文の実行に失敗しました");
+        setError("Order execution failed");
         setModalOpen(true);
       } else {
         setError("");
@@ -477,7 +477,7 @@ export default function TradingPage() {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("注文に失敗しました");
+        setError("Order execution failed");
       }
     } finally {
       setIsLoading(false);
@@ -487,11 +487,11 @@ export default function TradingPage() {
   async function handleCancelOrder() {
     setError("");
     if (!walletClient || !publicClient) {
-      setError("ウォレットまたはパブリッククライアントが接続されていません");
+      setError("Wallet or public client is not connected");
       return;
     }
     if (!cancelOrderId || cancelOrderId === "") {
-      setError("キャンセルするOrder IDを入力してください");
+      setError("Please enter the Order ID to cancel");
       return;
     }
     setIsLoading(true);
@@ -507,20 +507,20 @@ export default function TradingPage() {
 
       const receiptCancel = await publicClient.waitForTransactionReceipt({ hash });
       if (receiptCancel.status !== "success") {
-        setError("注文キャンセルの実行に失敗しました");
+        setError("Order cancellation failed");
         setModalOpen(true);
       } else {
         setError("");
         setTxHash(hash);
         setModalOpen(true);
-        console.log("Cancel order successful");
+        console.log("Order cancellation successful");
       }
     } catch (err: unknown) {
       console.error("Cancel order failed", err);
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError("注文のキャンセルに失敗しました");
+        setError("Order cancellation failed");
       }
     } finally {
       setIsLoading(false);
@@ -709,7 +709,7 @@ export default function TradingPage() {
                         const value = e.target.value;
                         setMarketPrice(value);
                         if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
-                          setMarketPriceError("価格は小数点以下2桁まで入力可能です");
+                          setMarketPriceError("Price can have up to 2 decimal places only");
                         } else {
                           setMarketPriceError("");
                         }
@@ -732,7 +732,7 @@ export default function TradingPage() {
                         const value = e.target.value;
                         setMarketAmount(value);
                         if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
-                          setMarketAmountError("数量は小数点以下6桁まで入力可能です");
+                          setMarketAmountError("Amount can have up to 6 decimal places only");
                         } else {
                           setMarketAmountError("");
                         }
@@ -766,7 +766,7 @@ export default function TradingPage() {
                         const value = e.target.value;
                         setLimitPrice(value);
                         if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
-                          setLimitPriceError("価格は小数点以下2桁まで入力可能です");
+                          setLimitPriceError("Price can have up to 2 decimal places only");
                         } else {
                           setLimitPriceError("");
                         }
@@ -789,7 +789,7 @@ export default function TradingPage() {
                         const value = e.target.value;
                         setLimitAmount(value);
                         if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
-                          setLimitAmountError("数量は小数点以下6桁まで入力可能です");
+                          setLimitAmountError("Amount can have up to 6 decimal places only");
                         } else {
                           setLimitAmountError("");
                         }
