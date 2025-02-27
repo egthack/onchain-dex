@@ -5,6 +5,7 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../abi/ITradingVault.json";
 import * as ethers from "ethers";
 import env from "../env.json";
+import Script from "next/script";
 
 interface Order {
   id: string;
@@ -42,25 +43,23 @@ const VAULT_ADDRESS = (env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddre
 
 const vaultAbi = TradingVaultABI.abi;
 
-interface TradingViewWidgetOptions {
-  autosize: boolean;
-  symbol: string;
-  interval: string;
-  timezone: string;
-  theme: string;
-  style: string;
-  locale: string;
-  toolbar_bg: string;
-  enable_publishing: boolean;
-  hide_side_toolbar: boolean;
-  allow_symbol_change: boolean;
-  container_id: string;
-}
-
 declare global {
   interface Window {
     TradingView?: {
-      widget(options: TradingViewWidgetOptions): void;
+      widget: (options: {
+        autosize: boolean;
+        symbol: string;
+        interval: string;
+        timezone: string;
+        theme: string;
+        style: string;
+        locale: string;
+        toolbar_bg: string;
+        enable_publishing: boolean;
+        hide_side_toolbar: boolean;
+        allow_symbol_change: boolean;
+        container_id: string;
+      }) => void;
     };
   }
 }
@@ -344,30 +343,31 @@ export default function TradingPage() {
     return () => clearInterval(interval);
   }, [selectedPair]);
 
-  /* NEW: Initialize TradingView chart based on selectedPair */
+  const symbolMap: { [key: string]: string } = {
+    WETH: "BINANCE:ETHUSDC",
+    WBTC: "BINANCE:BTCUSDC",
+    POL: "BINANCE:POLUSDC"
+  };
+  const widgetSymbol = symbolMap[selectedPair.base] || "BINANCE:ETHUSDC";
+
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.TradingView) {
-      const pair = `${selectedPair.base}${selectedPair.quote}`;
-      const container = document.getElementById('tradingview_chart');
-      if (container) {
-        container.innerHTML = '';
-        window.TradingView.widget({
-          autosize: true,
-          symbol: `BINANCE:${pair}`,
-          interval: 'D',
-          timezone: 'Asia/Tokyo',
-          theme: document.body.classList.contains('light') ? 'light' : 'dark',
-          style: '1',
-          locale: 'ja',
-          toolbar_bg: '#f1f3f6',
-          enable_publishing: false,
-          hide_side_toolbar: false,
-          allow_symbol_change: true,
-          container_id: 'tradingview_chart'
-        });
-      }
+    if (window.TradingView) {
+      new window.TradingView.widget({
+        autosize: true,
+        symbol: widgetSymbol,
+        interval: "D",
+        timezone: "Asia/Tokyo",
+        theme: "dark",
+        style: "1",
+        locale: "ja",
+        toolbar_bg: "#f1f3f6",
+        enable_publishing: false,
+        hide_side_toolbar: false,
+        allow_symbol_change: true,
+        container_id: "tradingview_chart",
+      });
     }
-  }, [selectedPair]);
+  }, [widgetSymbol]);
 
   async function handlePlaceOrder() {
     setError("");
@@ -583,6 +583,28 @@ export default function TradingPage() {
 
   return (
     <div className="grid grid-cols-12 gap-3">
+      <Script
+        src="https://s3.tradingview.com/tv.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          if (window.TradingView) {
+            new window.TradingView.widget({
+              autosize: true,
+              symbol: widgetSymbol,
+              interval: "D",
+              timezone: "Asia/Tokyo",
+              theme: "dark",
+              style: "1",
+              locale: "ja",
+              toolbar_bg: "#f1f3f6",
+              enable_publishing: false,
+              hide_side_toolbar: false,
+              allow_symbol_change: true,
+              container_id: "tradingview_chart",
+            });
+          }
+        }}
+      />
       {/* Left Column: Chart and Trading Form */}
       <div className="col-span-12 lg:col-span-8 grid grid-cols-1 gap-3">
         {/* Chart Placeholder */}
@@ -619,10 +641,8 @@ export default function TradingPage() {
               {selectedPair.base}-{selectedPair.quote}
             </div>
           </div>
-          <div
-            id="tradingview_chart"
-            className="h-[400px] rounded overflow-hidden"
-          />
+          <div id="tradingview_chart" className="h-[400px] rounded bg-trading-light flex items-center justify-center">
+          </div>
         </div>
 
         {/* Trading Form */}
