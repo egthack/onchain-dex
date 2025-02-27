@@ -18,6 +18,8 @@ type Token @entity {
   deposits: [Deposit!]! @derivedFrom(field: "token")
   withdrawals: [Withdrawal!]! @derivedFrom(field: "token")
   totalVolume: BigInt!
+  # 取引ペアの最新情報を追加
+  lastTrades: [LastTrade!] @derivedFrom(field: "baseToken")
 }
 
 type Balance @entity {
@@ -66,4 +68,34 @@ enum OrderStatus {
   OPEN
   FILLED
   CANCELLED
+}
+
+# 最新の取引情報を格納するエンティティ
+type LastTrade @entity {
+  id: ID! # baseToken-quoteToken
+  baseToken: Token!
+  quoteToken: Token!
+  lastPrice: BigInt!
+  lastAmount: BigInt!
+  lastTimestamp: BigInt!
+  priceChangePercent: BigDecimal # 24時間の価格変動率
+  highPrice24h: BigInt! # 24時間の最高価格
+  lowPrice24h: BigInt! # 24時間の最低価格
+  volume24h: BigInt! # 24時間の取引量（baseToken単位）
+  quoteVolume24h: BigInt! # 24時間の取引量（quoteToken単位）
+  updatedAt: BigInt!
+}
+
+# 各取引の情報を格納するエンティティ
+type Trade @entity {
+  id: ID! # tx-logIndex
+  makerOrderId: BigInt!
+  takerOrderId: BigInt!
+  baseToken: Token!
+  quoteToken: Token!
+  price: BigInt!
+  amount: BigInt!
+  side: Int! # 0: Buy, 1: Sell
+  timestamp: BigInt!
+  transaction: Bytes!
 }

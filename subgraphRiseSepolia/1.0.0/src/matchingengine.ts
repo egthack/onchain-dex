@@ -1,4 +1,4 @@
-import { BigInt, Address, Bytes } from "@graphprotocol/graph-ts";
+import { BigInt, Address, Bytes, BigDecimal } from "@graphprotocol/graph-ts";
 import {
   OrderPlaced as OrderPlacedEvent,
   TradeExecuted as TradeExecutedEvent,
@@ -7,7 +7,9 @@ import {
 import {
   User,
   Token,
-  Order
+  Order,
+  LastTrade,
+  Trade
 } from "../generated/schema";
 import { fetchTokenInfo } from "./mockerc20";
 import { initializeKnownTokens } from "./init";
@@ -77,6 +79,8 @@ export function handleTradeExecuted(event: TradeExecutedEvent): void {
   
   let makerOrderId = event.params.makerOrderId.toString();
   let takerOrderId = event.params.takerOrderId.toString();
+  let baseTokenId = event.params.base.toHexString();
+  let quoteTokenId = event.params.quote.toHexString();
   
   // 注文の更新
   let makerOrder = Order.load(makerOrderId);
@@ -113,9 +117,6 @@ export function handleTradeExecuted(event: TradeExecutedEvent): void {
   }
   
   // トークンの取引量を更新
-  let baseTokenId = event.params.base.toHexString();
-  let quoteTokenId = event.params.quote.toHexString();
-  
   let baseToken = Token.load(baseTokenId);
   if (baseToken != null) {
     baseToken.totalVolume = baseToken.totalVolume.plus(event.params.amount);
@@ -134,6 +135,87 @@ export function handleTradeExecuted(event: TradeExecutedEvent): void {
   
   // クォートトークン情報の取得
   fetchTokenInfo(event.params.quote);
+  
+  // 最新の取引情報を保存
+  // lastTradeのIDは baseToken-quoteToken の形式で作成
+  let lastTradeId = baseTokenId + "-" + quoteTokenId;
+  let lastTrade = LastTrade.load(lastTradeId);
+  
+  // 新しい取引情報のエンティティを作成
+  let tradeId = event.transaction.hash.toHexString() + "-" + event.logIndex.toString();
+  let trade = new Trade(tradeId);
+  trade.makerOrderId = event.params.makerOrderId;
+  trade.takerOrderId = event.params.takerOrderId;
+  trade.baseToken = baseTokenId;
+  trade.quoteToken = quoteTokenId;
+  trade.price = event.params.price;
+  trade.amount = event.params.amount;
+  // サイドはtakerOrderのサイドを使用
+  trade.side = takerOrder != null ? takerOrder.side : 0;
+  trade.timestamp = event.block.timestamp;
+  trade.transaction = event.transaction.hash;
+  trade.save();
+  
+  if (lastTrade == null) {
+    // 新規作成
+    lastTrade = new LastTrade(lastTradeId);
+    lastTrade.baseToken = baseTokenId;
+    lastTrade.quoteToken = quoteTokenId;
+    lastTrade.lastPrice = event.params.price;
+    lastTrade.lastAmount = event.params.amount;
+    lastTrade.lastTimestamp = event.block.timestamp;
+    lastTrade.highPrice24h = event.params.price;
+    lastTrade.lowPrice24h = event.params.price;
+    lastTrade.volume24h = event.params.amount;
+    lastTrade.quoteVolume24h = event.params.price.times(event.params.amount);
+    lastTrade.priceChangePercent = BigDecimal.fromString("0");
+    lastTrade.updatedAt = event.block.timestamp;
+  } else {
+    // 既存レコードの更新
+    // 前回の価格を保存して変化率を計算
+    let oldPrice = lastTrade.lastPrice;
+    
+    // 最新の価格情報を更新
+    lastTrade.lastPrice = event.params.price;
+    lastTrade.lastAmount = event.params.amount;
+    lastTrade.lastTimestamp = event.block.timestamp;
+    
+    // 24時間の価格範囲を更新
+    if (event.params.price.gt(lastTrade.highPrice24h)) {
+      lastTrade.highPrice24h = event.params.price;
+    }
+    if (event.params.price.lt(lastTrade.lowPrice24h)) {
+      lastTrade.lowPrice24h = event.params.price;
+    }
+    
+    // 24時間の取引量を更新
+    // 実際には24時間経過したら古いデータをリセットするロジックが必要
+    let oneDayAgo = event.block.timestamp.minus(BigInt.fromI32(86400)); // 24時間 = 86400秒
+    
+    if (lastTrade.updatedAt.lt(oneDayAgo)) {
+      // 24時間以上経過している場合はリセット
+      lastTrade.volume24h = event.params.amount;
+      lastTrade.quoteVolume24h = event.params.price.times(event.params.amount);
+      // 価格変化率もリセット
+      lastTrade.priceChangePercent = BigDecimal.fromString("0");
+    } else {
+      // 24時間以内の場合は加算
+      lastTrade.volume24h = lastTrade.volume24h.plus(event.params.amount);
+      lastTrade.quoteVolume24h = lastTrade.quoteVolume24h.plus(event.params.price.times(event.params.amount));
+      
+      // 価格変化率を計算
+      if (!oldPrice.isZero()) {
+        let priceDiff = event.params.price.minus(oldPrice).toBigDecimal();
+        let oldPriceDecimal = oldPrice.toBigDecimal();
+        let changePercent = priceDiff.times(BigDecimal.fromString("100")).div(oldPriceDecimal);
+        lastTrade.priceChangePercent = changePercent;
+      }
+    }
+    
+    lastTrade.updatedAt = event.block.timestamp;
+  }
+  
+  lastTrade.save();
 }
 
 export function handlePairAdded(event: PairAddedEvent): void {
@@ -166,4 +248,24 @@ export function handlePairAdded(event: PairAddedEvent): void {
   
   // クォートトークン情報の取得
   fetchTokenInfo(event.params.quote);
+  
+  // ペアの初期化（LastTradeエンティティの初期化）
+  let lastTradeId = baseTokenId + "-" + quoteTokenId;
+  let lastTrade = LastTrade.load(lastTradeId);
+  
+  if (lastTrade == null) {
+    lastTrade = new LastTrade(lastTradeId);
+    lastTrade.baseToken = baseTokenId;
+    lastTrade.quoteToken = quoteTokenId;
+    lastTrade.lastPrice = BigInt.fromI32(0);
+    lastTrade.lastAmount = BigInt.fromI32(0);
+    lastTrade.lastTimestamp = event.block.timestamp;
+    lastTrade.highPrice24h = BigInt.fromI32(0);
+    lastTrade.lowPrice24h = BigInt.fromI32(0);
+    lastTrade.volume24h = BigInt.fromI32(0);
+    lastTrade.quoteVolume24h = BigInt.fromI32(0);
+    lastTrade.priceChangePercent = BigDecimal.fromString("0");
+    lastTrade.updatedAt = event.block.timestamp;
+    lastTrade.save();
+  }
 }
