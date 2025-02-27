@@ -988,7 +988,7 @@ describe("MatchingEngine", function () {
     it("should match orders correctly with bulk matching market order", async function () {
       const BATCH_SIZE = 200;
       const sellOrderLength = Math.floor(BATCH_SIZE);
-      // 200個の売り注文を出す（各100ずつ）
+      // 200個の売り注文を出す
       for (let i = 0; i < sellOrderLength; i++) {
         const tradeRequest = await createTradeRequest({
           user: trader,
@@ -1007,7 +1007,7 @@ describe("MatchingEngine", function () {
         base: baseTokenA,
         quote: quoteTokenA,
         side: 0, // Buy
-        amount: 20000,
+        amount: 2000000,
         price: 0, // Market order
       });
       await vault.connect(user).executeTradeBatch([marketBuyOrder]);
@@ -1018,22 +1018,20 @@ describe("MatchingEngine", function () {
         baseTokenA,
         quoteTokenA
       );
-      // 200000(今回付与) + 20000(成行買い注文約定) = 220000
-      expect(userBalanceBase).to.equal(220000);
-      // 200000(今回付与) - 20000(成行買い注文約定 × 価格1) = 180000
-      expect(userBalanceQuote).to.equal(180000);
+      // base: + 0.000001 * 2000000 /10 = 0.002, quote: - 0.000001 * 0.01 * 2000000 = -0.00002
+      expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.2', 18));
+      expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.02', 6));
 
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
-      // 200000(今回付与) - 20000(売り注文約定) = 180000
-      expect(traderBalanceBase).to.equal(180000);
-      // 200000(今回付与) + 20000(売り注文約定 × 価格1) = 220000
-      expect(traderBalanceQuote).to.equal(220000);
+      // base: - 0.000001 * 2000000 /10 = -0.002, quote: + 0.000001 * 0.01 * 2000000 = 0.00002
+      expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.2', 18));
+      expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.02', 6));
     });
 
-    // 指値で板を食うマッチング
+    // 指値で板を食うマッチング(実際のシナリオテスト)
     it("should match orders correctly with bulk matching limit order", async function () {
       const BATCH_SIZE = 200;
       // まず売り注文を出す（買い注文のマッチング先として）
