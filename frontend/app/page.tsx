@@ -668,6 +668,15 @@ export default function TradingPage() {
     return `${yy}/${mm}/${dd} ${hh}:${min}`;
   }
 
+  // New: Function to handle order book row click
+  const handlePriceClick = (price: string) => {
+    if (orderType === 'market') {
+      setMarketPrice(price);
+    } else {
+      setLimitPrice(price);
+    }
+  };
+
   return (
     <div className="grid grid-cols-12 gap-3">
       <Script
@@ -819,12 +828,17 @@ export default function TradingPage() {
                 for (const order of aggregatedSellOrdersWithTotal) {
                   const ratio = maxSellTotal ? (order.total / maxSellTotal) * 100 : 0;
                   rows.push(
-                    <div key={order.price} className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
+                    <button 
+                      type="button"
+                      key={order.price}
+                      onClick={() => handlePriceClick((Number.parseFloat(order.price) / 100).toFixed(2))}
+                      className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800 appearance-none focus:outline-none"
+                    >
                       <div className="absolute top-0 left-0 h-full bg-red-500 opacity-30" style={{ width: `${ratio}%` }} />
                       <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
                       <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
                       <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
-                    </div>
+                    </button>
                   );
                 }
                 return rows;
@@ -847,12 +861,17 @@ export default function TradingPage() {
                 for (const order of aggregatedBuyOrdersWithTotal) {
                   const ratio = maxBuyTotal ? (order.total / maxBuyTotal) * 100 : 0;
                   rows.push(
-                    <div key={order.price} className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
+                    <button 
+                      type="button"
+                      key={order.price}
+                      onClick={() => handlePriceClick((Number.parseFloat(order.price) / 100).toFixed(2))}
+                      className="relative w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800 appearance-none focus:outline-none"
+                    >
                       <div className="absolute top-0 left-0 h-full bg-green-500 opacity-30" style={{ width: `${ratio}%` }} />
                       <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
                       <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
                       <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
-                    </div>
+                    </button>
                   );
                 }
                 const emptyCount = 5 - aggregatedBuyOrdersWithTotal.length;
