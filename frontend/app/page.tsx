@@ -113,6 +113,10 @@ export default function TradingPage() {
   const openOrders = myOrders.filter(order => order.status === 'OPEN');
   const historyOrders = myOrders.filter(order => order.status !== 'OPEN');
 
+  // Add new state variables near other useState declarations
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [cancelOrderIdForModal, setCancelOrderIdForModal] = useState("");
+
   // トークンシンボルからデシマル値を取得する関数
   const getTokenDecimals = useCallback((symbol: string): number => {
     return TOKEN_DECIMALS[symbol as keyof typeof TOKEN_DECIMALS] || 18; // デフォルトは18
@@ -607,6 +611,7 @@ export default function TradingPage() {
               quoteToken_: { symbol: "${selectedPair.quote}" }
             }
           ) {
+            id
             price
             side
             status
@@ -627,8 +632,9 @@ export default function TradingPage() {
       });
       const result = await response.json();
       if (result.data?.orders) {
-        console.log("result.data.orders", result.data.orders);
-        setMyOrders(result.data.orders);
+        const sortedOrders = result.data.orders.sort((a: Order, b: Order) => Number(b.createdAt) - Number(a.createdAt));
+        console.log("result.data.orders (sorted)", sortedOrders);
+        setMyOrders(sortedOrders);
       } else {
         console.error("No orders found", result);
       }
@@ -643,6 +649,64 @@ export default function TradingPage() {
     const interval = setInterval(fetchMyOrders, 10000); // polling every 10 seconds
     return () => clearInterval(interval);
   }, [fetchMyOrders]);
+
+  // Add new function to handle cancellation confirmation
+  async function handleConfirmCancel() {
+    setError("");
+    if (!walletClient || !publicClient) {
+      setError("Wallet or public client is not connected");
+      return;
+    }
+    if (!cancelOrderIdForModal) {
+      setError("No order selected for cancellation");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const orderIdBN = ethers.parseUnits(cancelOrderIdForModal, 0);
+      const hash = await walletClient.writeContract({
+        address: VAULT_ADDRESS,
+        abi: vaultAbi,
+        functionName: "cancelOrder",
+        args: [orderIdBN],
+        gas: BigInt(300000)
+      });
+      const receiptCancel = await publicClient.waitForTransactionReceipt({ hash });
+      if (receiptCancel.status !== "success") {
+        setError("Order cancellation failed");
+        setModalOpen(true);
+      } else {
+        setError("");
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log("Order cancellation successful");
+        fetchMyOrders();
+      }
+    } catch (err: unknown) {
+      console.error("Cancel order failed", err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Order cancellation failed");
+      }
+    } finally {
+      setIsLoading(false);
+      setIsCancelModalOpen(false);
+      setCancelOrderIdForModal("");
+    }
+  }
+
+  // Helper function to format date string as 'YY/MM/DD HH:mm'
+  function formatDate(dateStr: string): string {
+    const timestamp = Number(dateStr) * 1000;
+    const date = new Date(timestamp);
+    const yy = String(date.getFullYear()).slice(-2);
+    const mm = (`0${date.getMonth() + 1}`).slice(-2);
+    const dd = (`0${date.getDate()}`).slice(-2);
+    const hh = (`0${date.getHours()}`).slice(-2);
+    const min = (`0${date.getMinutes()}`).slice(-2);
+    return `${yy}/${mm}/${dd} ${hh}:${min}`;
+  }
 
   return (
     <div className="grid grid-cols-12 gap-3">
@@ -732,19 +796,31 @@ export default function TradingPage() {
             <table className="min-w-full divide-y divide-trading-light bg-trading-gray rounded-lg overflow-hidden shadow-md">
               <thead className="bg-trading-light">
                 <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Id</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Date</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Price</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Amount</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">{activeTab === 'open' ? 'Side' : 'Status'}</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Side</th>
+                  {activeTab === 'open' && (
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Cancel</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-trading-light">
                 {(activeTab === 'open' ? openOrders : historyOrders).map(order => (
                   <tr key={order.id} className="hover:bg-trading-black transition-colors">
-                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.price}</td>
-                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</td>
-                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{activeTab === 'open' ? (order.side === 0 ? 'BUY' : 'SELL') : order.status}</td>
-                    <td className={`px-4 py-2 text-sm ${order.side === 0 ? 'text-green-300' : 'text-red-300'}`}>{order.createdAt}</td>
+                    <td className="px-4 py-2 text-sm">{order.id}</td>
+                                        <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{formatDate(order.createdAt)}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.price}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.side === 0 ? 'BUY' : 'SELL'}</td>
+                    {activeTab === 'open' && (
+                      <td className="px-4 py-2 text-sm text-center">
+                        <button type="button" onClick={() => { console.log(order.id); setCancelOrderIdForModal(order.id); setIsCancelModalOpen(true); }} className="text-red-500 hover:text-red-700">
+                          ×
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1003,34 +1079,6 @@ export default function TradingPage() {
               </button>
             )}
           </div>
-
-          {/* New: Cancel Order Block added to Right Column */}
-          <div className="bg-trading-gray rounded-lg p-3 mt-3">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Cancel Order</h2>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="cancel-order-input-right" className="block text-xs font-medium text-gray-400 mb-1">
-                  Order ID
-                </label>
-                <input
-                  id="cancel-order-input-right"
-                  type="number"
-                  className="trading-input"
-                  placeholder="0"
-                  value={cancelOrderId}
-                  onChange={(e) => setCancelOrderId(e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleCancelOrder}
-                disabled={isLoading}
-                className="w-full py-2 bg-red-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
-              >
-                {isLoading ? "Processing..." : "Cancel Order"}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1066,6 +1114,23 @@ export default function TradingPage() {
                 }}
                 className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
               >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isCancelModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
+            <h3 className="text-xl font-bold mb-3">Confirm Cancellation</h3>
+            <p className="mb-4">Are you sure you want to cancel order ID: {cancelOrderIdForModal}?</p>
+            <div className="flex justify-between">
+              <button type="button" onClick={handleConfirmCancel} disabled={isLoading} className="bg-red-500 text-white px-4 py-2 rounded">
+                {isLoading ? "Processing..." : "Cancel Order"}
+              </button>
+              <button type="button" onClick={() => setIsCancelModalOpen(false)} className="bg-accent-green text-black px-4 py-2 rounded">
                 Close
               </button>
             </div>
