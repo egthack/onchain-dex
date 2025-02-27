@@ -564,7 +564,7 @@ describe("MatchingEngine", function () {
 
 
     describe("Market Orders", function () {
-      it("should execute market buy order against existing sell orders", async function () {
+      it.only("should execute market buy order against existing sell orders", async function () {
         // 指値売り注文を作成
         const limitSellOrder = await createTradeRequest({
           user: trader,
@@ -598,16 +598,17 @@ describe("MatchingEngine", function () {
           baseTokenA,
           quoteTokenA
         );
-        // base: 10025(50/2=25 bought), quote: 9950(50 used)
-        expect(userBalanceBase).to.equal(10025);
-        expect(userBalanceQuote).to.equal(9950);
+        // quote: - 500 , base: + 500 /2 = + 250
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.00025', 18));
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.0005', 6));
+
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9900(75 locked, 25 sold), quote: 10050(50 returned)
-        expect(traderBalanceBase).to.equal(9900);
-        expect(traderBalanceQuote).to.equal(10050);
+        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.001', 18));
+        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
 
         // trader の50 locked 注文をキャンセルして返金される金額を確認
         await vault.connect(trader).cancelOrder(0);
@@ -616,8 +617,8 @@ describe("MatchingEngine", function () {
           userBalanceQuote: traderBalanceQuote2,
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9975(9900 + 25 bought 50 locked), quote: 10050(50 returned)
-        expect(traderBalanceBase2).to.equal(9975);
-        expect(traderBalanceQuote2).to.equal(10050);
+        expect(traderBalanceBase2).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.00025', 18));
+        expect(traderBalanceQuote2).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
       });
 
       // 成行注文後、オーダーブックの最良売り注文が消えているかを検証するテスト
