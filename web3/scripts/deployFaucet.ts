@@ -12,7 +12,7 @@ function getLatestDeployment(network: string): {
   tokens: Record<string, string>;
   trading: Record<string, string>;
 } {
-  const deploymentPath = path.join(__dirname, "../deployments", network);
+  const deploymentPath = path.join(__dirname, "../../deployments", network);
   const files = fs
     .readdirSync(deploymentPath)
     .filter((f) => f.startsWith(`deployment-${network}`))

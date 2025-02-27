@@ -15,7 +15,7 @@ function getLatestDeployment(network: string): {
   tokens: Record<string, string>;
   trading: Record<string, string>;
 } {
-  const deploymentPath = path.join(__dirname, "../deployments", network);
+  const deploymentPath = path.join(__dirname, "../../deployments", network);
   const files = fs
     .readdirSync(deploymentPath)
     .filter((f) => f.startsWith(`deployment-${network}`))
@@ -87,26 +87,27 @@ async function main() {
   )) as TradingVault;
 
   // 各ペアに対して板を並べる
+  // priceはデフォルト
   const baseTokens = {
     WBTC: {
       symbol: "WBTC",
-      price: 30000 * 10 ** 6,
-      orderSize: 1,
+      price: 30000 * 10 ** 2, // 30000 USD
+      amount: 100, // 0.0001 WBTC
     },
     WETH: {
       symbol: "WETH",
-      price: 3000 * 10 ** 6,
-      orderSize: 1,
+      price: 3000 * 10 ** 2,
+      amount: 100,
     },
     POL: {
       symbol: "POL",
-      price: 5 * 10 ** 6,
-      orderSize: 5,
+      price: 5 * 10 ** 2,
+      amount: 100,
     },
     TRUMP: {
       symbol: "TRUMP",
-      price: 0.5 * 10 ** 6,
-      orderSize: 10,
+      price: 0.5 * 10 ** 2,
+      amount: 100,
     },
   };
 
@@ -128,7 +129,7 @@ async function main() {
     const baseAmount = BigInt(1000) * BigInt(10) ** BigInt(baseDecimals);
     // USDCのデポジット量を増やす（価格 * 数量 * 注文数 * 安全係数）
     const quoteAmount =
-      BigInt(Math.ceil(token.price * token.orderSize * 20 * 1.5)) *
+      BigInt(Math.ceil(token.price * token.amount * 20 * 1.5)) *
       BigInt(10) ** BigInt(quoteDecimals);
 
     // approve
@@ -168,20 +169,33 @@ async function main() {
     // 現在価格を決定
     let currentPrice: number;
     if (bestBuyPrice > 0n && bestSellPrice > 0n) {
+      // 注文がある場合は平均を現在価格とする
+      console.log(`use average of best buy price and best sell price as current price: ${bestBuyPrice}, ${bestSellPrice}`);
       currentPrice = Math.floor(
         (Number(bestBuyPrice) + Number(bestSellPrice)) / 2
       );
     } else if (bestBuyPrice > 0n) {
+      console.log(`use best buy price as current price: ${bestBuyPrice}`);
+      // 買い注文のみがある場合は買い注文の価格を現在価格とする
       currentPrice = Number(bestBuyPrice);
     } else if (bestSellPrice > 0n) {
+      // 売り注文のみがある場合は売り注文の価格を現在価格とする
+      console.log(`use best sell price as current price: ${bestSellPrice}`);
       currentPrice = Number(bestSellPrice);
     } else {
-      currentPrice = token.price; // すでにUSDCのデシマルを考慮済み
+      console.log(`use default price: ${token.price}`);
+      currentPrice = token.price; 
     }
 
+    console.log(`Current price: ${currentPrice}`);
+
     const orders = [];
-    const SPREAD = 1;
     const ORDER_COUNT = 10;
+
+    // 0.1%スプレッドとして並べる
+    const calculateSpread = (price: number, multiplier: number) => {
+      return Math.floor(price * multiplier * 0.001);
+    };
 
     // 売り注文を生成（現在価格より高い価格帯）
     for (let i = 1; i <= ORDER_COUNT; i++) {
@@ -191,8 +205,8 @@ async function main() {
           base: baseToken,
           quote: quoteToken,
           side: 1, // Sell
-          amount: token.orderSize,
-          price: currentPrice + i * SPREAD,
+          amount: token.amount,
+          price: currentPrice + calculateSpread(currentPrice, i),
         })
       );
     }
@@ -205,11 +219,12 @@ async function main() {
           base: baseToken,
           quote: quoteToken,
           side: 0, // Buy
-          amount: token.orderSize,
-          price: currentPrice - i * SPREAD,
+          amount: token.amount,
+          price: currentPrice - calculateSpread(currentPrice, i),
         })
       );
     }
+    console.log(`orders: ${JSON.stringify(orders)}`);
 
     // 注文を実行
     console.log(`Placing ${orders.length} orders for ${token.symbol}/USDC`);
