@@ -770,8 +770,10 @@ export default function TradingPage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Price</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Amount</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Side</th>
-                  {activeTab === 'open' && (
+                  {activeTab === 'open' ? (
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Cancel</th>
+                  ) : (
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-200 uppercase tracking-wider">Status</th>
                   )}
                 </tr>
               </thead>
@@ -780,19 +782,17 @@ export default function TradingPage() {
                   <tr key={order.id} className="hover:bg-trading-black transition-colors">
                     <td className="px-4 py-2 text-sm">{order.id}</td>
                     <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{formatDate(order.createdAt)}</td>
-                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>
-                      {(Number(order.price) / 100).toFixed(2)}
-                    </td>
-                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>
-                      {(Number(order.amount) / (10 ** 6)).toFixed(2)} {order.baseToken?.symbol || ''}
-                    </td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{(Number(order.price) / 100).toFixed(2)}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{(Number(order.amount) / (10 ** 6)).toFixed(2)} {order.baseToken?.symbol || ''}</td>
                     <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.side === 0 ? 'BUY' : 'SELL'}</td>
-                    {activeTab === 'open' && (
+                    {activeTab === 'open' ? (
                       <td className="px-4 py-2 text-sm text-center">
                         <button type="button" onClick={() => { console.log(order.id); setCancelOrderIdForModal(order.id); setIsCancelModalOpen(true); }} className="text-red-500 hover:text-red-700">
                           ×
                         </button>
                       </td>
+                    ) : (
+                      <td className="px-4 py-2 text-sm">{order.status}</td>
                     )}
                   </tr>
                 ))}
