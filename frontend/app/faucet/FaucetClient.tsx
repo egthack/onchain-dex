@@ -1,55 +1,82 @@
 "use client";
 
-import { useAccount } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { useState } from "react";
+import FaucetAbi from "../../abi/IMultiTokenFaucet.json";
+import env from "../../env.json";
 
 const SUPPORTED_TOKENS = [
+  {
+    symbol: "USDC",
+    name: "USD Coin",
+    decimals: 6,
+    amount: "10000",
+  },
   {
     symbol: "WETH",
     name: "Wrapped ETH",
     decimals: 18,
-    amount: "0.1",
+    amount: "100",
   },
   {
     symbol: "WBTC",
     name: "Wrapped BTC",
     decimals: 8,
-    amount: "0.01",
-  },
-  {
-    symbol: "USDC",
-    name: "USD Coin",
-    decimals: 6,
-    amount: "1000",
+    amount: "10",
   },
   {
     symbol: "POL",
     name: "Polaris Token",
     decimals: 18,
     amount: "1000",
-  },
-  {
-    symbol: "TRUMP",
-    name: "Trump Token",
-    decimals: 18,
-    amount: "1000",
-  },
+  }
 ];
+
+const FAUCET_ADDRESS = (env.NEXT_PUBLIC_FAUCET_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
+const TOKEN_ADDRESSES = {
+  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
+};
+
+const faucetAbi = FaucetAbi.abi;
 
 export default function FaucetClient() {
   const { isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
   const [selectedToken, setSelectedToken] = useState(SUPPORTED_TOKENS[0]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
 
   const handleMint = async () => {
-    if (!isConnected) return;
+    if (!isConnected || !walletClient || !publicClient) return;
     setIsLoading(true);
     try {
-      // TODO: Implement minting logic
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate delay
-      console.log(`Minting ${selectedToken.amount} ${selectedToken.symbol}`);
-    } catch (error) {
-      console.error("Failed to mint:", error);
+      const hash = await walletClient.writeContract({
+        address: FAUCET_ADDRESS,
+        abi: faucetAbi,
+        functionName: "requestTokens",
+        args: [TOKEN_ADDRESSES[selectedToken.symbol as keyof typeof TOKEN_ADDRESSES], selectedToken.amount],
+        gas: BigInt(300000)
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        setError("Request faucet transaction failed");
+        setModalOpen(true);
+      } else {
+        setTxHash(hash);
+        setModalOpen(true);
+        console.log(`Request ${selectedToken.amount} ${selectedToken.symbol} to faucet`);
+      }
+    } catch (err: unknown) {
+      const errorMessage = (err instanceof Error) ? err.message : "Request faucet transaction failed";
+      console.error("Failed to request faucet:", err);
+      setError(errorMessage);
+      setModalOpen(true);
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +96,7 @@ export default function FaucetClient() {
             <div className="flex flex-wrap gap-2">
               {SUPPORTED_TOKENS.map((token) => (
                 <button
+                  type="button"
                   key={token.symbol}
                   onClick={() => setSelectedToken(token)}
                   className={`px-4 py-2 rounded-lg font-medium ${
@@ -101,6 +129,7 @@ export default function FaucetClient() {
           {/* Mint Button */}
           {isConnected ? (
             <button
+              type="button"
               onClick={handleMint}
               disabled={isLoading}
               className={`w-full py-3 bg-accent-green text-black font-semibold rounded-lg transition-all ${
@@ -118,6 +147,45 @@ export default function FaucetClient() {
           )}
         </div>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-trading-gray p-6 rounded-lg shadow-lg max-w-md mx-auto text-white">
+            {error ? (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Failed</h3>
+                <p className="break-all mb-3">{error}</p>
+                <p className="text-sm text-gray-400">
+                  You may have already used the faucet within the last 24 hours.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold mb-3">Transaction Success</h3>
+                <p className="break-all mb-3">
+                  Tx Hash: <a
+                    href={`${process.env.NEXT_PUBLIC_RISE_SEPOLIA_BLOCK_EXPLORER || 'https://testnet.com'}/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent-green underline"
+                  >
+                    {txHash}
+                  </a>
+                </p>
+              </>
+            )}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => { setModalOpen(false); setError(""); }}
+                className="mt-4 bg-accent-green text-black px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

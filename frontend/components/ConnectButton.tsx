@@ -32,6 +32,7 @@ export default function ConnectButton() {
   if (isConnected) {
     return (
       <button
+        type="button"
         onClick={() => disconnect()}
         className="px-6 py-2 bg-trading-light text-white font-medium rounded-lg hover:bg-opacity-80 text-base"
       >
@@ -42,6 +43,7 @@ export default function ConnectButton() {
 
   return (
     <button
+      type="button"
       onClick={() => connect({ connector: injected() })}
       className="px-6 py-2 bg-accent-green text-black font-medium rounded-lg hover:shadow-glow text-base"
     >

@@ -1,8 +1,8 @@
 "use client";
 
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { Chain } from "viem";
+import type { Chain } from "viem";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { injected } from "wagmi/connectors";
 

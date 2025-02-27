@@ -1,0 +1,69 @@
+type User @entity {
+  id: ID! # ユーザーのアドレス
+  balances: [Balance!]! @derivedFrom(field: "user")
+  deposits: [Deposit!]! @derivedFrom(field: "user")
+  withdrawals: [Withdrawal!]! @derivedFrom(field: "user")
+  orders: [Order!]! @derivedFrom(field: "user")
+  totalDeposited: BigInt!
+  totalWithdrawn: BigInt!
+  createdAt: BigInt!
+  updatedAt: BigInt!
+}
+
+type Token @entity {
+  id: ID! # トークンのアドレス
+  symbol: String
+  decimals: Int
+  balances: [Balance!]! @derivedFrom(field: "token")
+  deposits: [Deposit!]! @derivedFrom(field: "token")
+  withdrawals: [Withdrawal!]! @derivedFrom(field: "token")
+  totalVolume: BigInt!
+}
+
+type Balance @entity {
+  id: ID! # user-token
+  user: User!
+  token: Token!
+  amount: BigInt!
+  updatedAt: BigInt!
+}
+
+type Deposit @entity {
+  id: ID! # tx-logIndex
+  user: User!
+  token: Token!
+  amount: BigInt!
+  timestamp: BigInt!
+  transaction: Bytes!
+}
+
+type Withdrawal @entity {
+  id: ID! # tx-logIndex
+  user: User!
+  token: Token!
+  amount: BigInt!
+  timestamp: BigInt!
+  transaction: Bytes!
+}
+
+type Order @entity {
+  id: ID! # orderId
+  user: User!
+  baseToken: Token!
+  quoteToken: Token!
+  side: Int! # 0: Buy, 1: Sell
+  amount: BigInt!
+  price: BigInt!
+  lockedAmount: BigInt!
+  status: OrderStatus!
+  createdAt: BigInt!
+  cancelledAt: BigInt
+  filledAt: BigInt
+  transaction: Bytes!
+}
+
+enum OrderStatus {
+  OPEN
+  FILLED
+  CANCELLED
+}
