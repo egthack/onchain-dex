@@ -870,26 +870,27 @@ describe("MatchingEngine", function () {
         expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.001', 6));
       });
 
+      // 成行買い注文後、最良売り注文が削除されることの確認
       it("should remove best sell order from orderbook after market buy execution", async function () {
-        // 最良売り注文を作成 (price = 1)
+        // 最良売り注文を作成 (price = 10)
         const bestSellOrder = await createTradeRequest({
           user: trader,
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
-          price: 1,
+          price: 10,
         });
         await vault.connect(trader).executeTradeBatch([bestSellOrder]);
 
-        // 次に高い売り注文を作成 (price = 2)
+        // 次に高い売り注文を作成 (price = 20)
         const secondSellOrder = await createTradeRequest({
           user: trader2,
           base: baseTokenA,
           quote: quoteTokenA,
           side: 1, // Sell
           amount: 100,
-          price: 2,
+          price: 20,
         });
         await vault.connect(trader2).executeTradeBatch([secondSellOrder]);
 
@@ -898,8 +899,8 @@ describe("MatchingEngine", function () {
           await baseTokenA.getAddress(),
           await quoteTokenA.getAddress()
         );
-        const bestSellBefore = await matchingEngine.getBestOrder(pairId, 1); // side = 1 for sell
-        expect(bestSellBefore.price).to.equal(1);
+        const bestSellBefore = await matchingEngine.getBestOrder(pairId, 1); // side = 10 for sell
+        expect(bestSellBefore.price).to.equal(10);
 
         // 成行買い注文を実行
         const marketBuyOrder = await createTradeRequest({
@@ -907,7 +908,7 @@ describe("MatchingEngine", function () {
           base: baseTokenA,
           quote: quoteTokenA,
           side: 0, // Buy
-          amount: 100,
+          amount: 1000,
           price: 0, // Market order
         });
         await vault.connect(user).executeTradeBatch([marketBuyOrder]);
@@ -921,7 +922,7 @@ describe("MatchingEngine", function () {
 
         // オーダーブックの最良売り注文が更新されていることを確認
         const bestSellAfter = await matchingEngine.getBestOrder(pairId, 1);
-        expect(bestSellAfter.price).to.equal(2); // 次に高い注文が最良売り注文になっているはず
+        expect(bestSellAfter.price).to.equal(20); // price10の売り注文が削除され、price20の売り注文が最良売り注文になっているはず
 
         // 残高確認
         const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
@@ -930,8 +931,9 @@ describe("MatchingEngine", function () {
           baseTokenA,
           quoteTokenA
         );
-        expect(userBalanceBase).to.equal(10100); // 初期値10000 + 買った100
-        expect(userBalanceQuote).to.equal(9900); // 初期値10000 - 支払った100
+        // base: + 0.000001 * 100 = 0.001, quote: - 0.000001 * 0.01 * 1000 = -0.00001
+        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0001', 18)); // 初期値10000 + 買った100
+        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6)); // 初期値10000 - 支払った100
       });
     });
   });
