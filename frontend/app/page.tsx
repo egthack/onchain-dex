@@ -14,7 +14,7 @@ interface Order {
   side: number;
   status: string;
   createdAt: string;
-  lockedAmount: string;
+  amount: string;
   baseToken: { symbol: string };
   quoteToken: { symbol: string };
 }
@@ -234,7 +234,7 @@ export default function TradingPage() {
                   side
                   status
                   createdAt
-                  lockedAmount
+                  amount
                   baseToken { symbol }
                   quoteToken { symbol }
                 }
@@ -283,7 +283,7 @@ export default function TradingPage() {
                   side
                   status
                   createdAt
-                  lockedAmount
+                  amount
                   baseToken { symbol }
                   quoteToken { symbol }
                 }
@@ -509,7 +509,7 @@ export default function TradingPage() {
     const groups: Record<string, { price: string, size: number }> = {};
     for (const order of sellOrderBook) {
       const price = order.price;
-      const size = Number.parseFloat(order.lockedAmount);
+      const size = Number.parseFloat(order.amount);
       if (groups[price]) {
         groups[price].size += size;
       } else {
@@ -537,7 +537,7 @@ export default function TradingPage() {
     const groups: Record<string, { price: string, size: number }> = {};
     for (const order of buyOrderBook) {
       const price = order.price;
-      const size = Number.parseFloat(order.lockedAmount);
+      const size = Number.parseFloat(order.amount);
       if (groups[price]) {
         groups[price].size += size;
       } else {
@@ -576,7 +576,6 @@ export default function TradingPage() {
             price
             side
             status
-            lockedAmount
             baseToken { symbol }
             quoteToken { symbol }
             filledAt
@@ -594,7 +593,6 @@ export default function TradingPage() {
       const result = await response.json();
       if (result.data?.orders) {
         const sortedOrders = result.data.orders.sort((a: Order, b: Order) => Number(b.createdAt) - Number(a.createdAt));
-        console.log("result.data.orders (sorted)", sortedOrders);
         setMyOrders(sortedOrders);
       } else {
         console.error("No orders found", result);
@@ -771,9 +769,11 @@ export default function TradingPage() {
                 {(activeTab === 'open' ? openOrders : historyOrders).map(order => (
                   <tr key={order.id} className="hover:bg-trading-black transition-colors">
                     <td className="px-4 py-2 text-sm">{order.id}</td>
-                                        <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{formatDate(order.createdAt)}</td>
-                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.price}</td>
-                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.lockedAmount || '-'} {order.baseToken?.symbol || ''}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{formatDate(order.createdAt)}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>
+                      {(Number(order.price) / 100).toFixed(2)}
+                    </td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.amount || '-'} {order.baseToken?.symbol || ''}</td>
                     <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.side === 0 ? 'BUY' : 'SELL'}</td>
                     {activeTab === 'open' && (
                       <td className="px-4 py-2 text-sm text-center">
@@ -801,8 +801,8 @@ export default function TradingPage() {
           <div>
             <div className="flex justify-between text-xs text-gray-400 mb-1 px-1">
               <span>Price</span>
-              <span>Size</span>
-              <span>Total</span>
+              <span>Size ({selectedPair.base})</span>
+              <span>Total ({selectedPair.base})</span>
             </div>
             <div className="grid grid-rows-5">
               {(() => {
@@ -815,9 +815,9 @@ export default function TradingPage() {
                 for (const order of aggregatedSellOrdersWithTotal) {
                   rows.push(
                     <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-red-900 text-red-300 hover:bg-red-800">
-                      <span>{Number.parseFloat(order.price).toFixed(2)}</span>
-                      <span>{order.size.toFixed(2)}</span>
-                      <span>{order.total.toFixed(2)}</span>
+                      <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
+                      <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
+                      <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
                     </div>
                   );
                 }
@@ -840,9 +840,9 @@ export default function TradingPage() {
                 for (const order of aggregatedBuyOrdersWithTotal) {
                   rows.push(
                     <div key={order.price} className="w-full flex justify-between p-1 rounded cursor-pointer bg-green-900 text-green-300 hover:bg-green-800">
-                      <span>{Number.parseFloat(order.price).toFixed(2)}</span>
-                      <span>{order.size.toFixed(2)}</span>
-                      <span>{order.total.toFixed(2)}</span>
+                      <span>{(Number.parseFloat(order.price) / 100).toFixed(2)}</span>
+                      <span>{(order.size / (10 ** 6)).toFixed(2)}</span>
+                      <span>{(order.total / (10 ** 6)).toFixed(2)}</span>
                     </div>
                   );
                 }
