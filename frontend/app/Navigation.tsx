@@ -31,22 +31,14 @@ export default function Navigation({ children }: { children: ReactNode }) {
               </svg>
               RiseX
             </Link>
-            <div className="flex gap-4">
-              <Link
-                href="/"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                Trade
-              </Link>
-              <Link
-                href="/faucet"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                Faucet
-              </Link>
-            </div>
           </div>
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-4 items-center">
+            <Link
+              href="/faucet"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              Faucet
+            </Link>
             <Link href="/deposit" className="bg-accent-green text-black px-3 py-1.5 rounded-md shadow transition-colors">Deposit</Link>
             <ConnectButton />
           </div>
