@@ -576,6 +576,7 @@ export default function TradingPage() {
             price
             side
             status
+            amount
             baseToken { symbol }
             quoteToken { symbol }
             filledAt
@@ -773,7 +774,9 @@ export default function TradingPage() {
                     <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>
                       {(Number(order.price) / 100).toFixed(2)}
                     </td>
-                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.amount || '-'} {order.baseToken?.symbol || ''}</td>
+                    <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>
+                      {(Number(order.amount) / (10 ** 6)).toFixed(2)} {order.baseToken?.symbol || ''}
+                    </td>
                     <td className={`px-4 py-2 text-sm ${activeTab === 'open' ? (order.side === 0 ? 'text-green-300' : 'text-red-300') : 'text-white'}`}>{order.side === 0 ? 'BUY' : 'SELL'}</td>
                     {activeTab === 'open' && (
                       <td className="px-4 py-2 text-sm text-center">
