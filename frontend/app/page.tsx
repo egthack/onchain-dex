@@ -6,6 +6,7 @@ import TradingVaultABI from "../abi/ITradingVault.json";
 import * as ethers from "ethers";
 import env from "../env.json";
 import Script from "next/script";
+import Link from "next/link";
 
 interface Order {
   id: string;
@@ -1014,17 +1015,28 @@ export default function TradingPage() {
 
             {isConnected ? (
               <>
-                <div className="text-sm text-white mb-2">
+                <div className={`text-sm pb-2 ${(side === 'buy' ? depositBalanceQuote : depositBalance) === BigInt(0) ? 'text-yellow-500' : 'text-white'}`}>
                   Available deposit balance: {side === 'buy' ? formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")) : formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base))} {side === 'buy' ? "USDC" : selectedPair.base}
                 </div>
-                <button
-                  type="button"
-                  onClick={handlePlaceOrder}
-                  disabled={isLoading}
-                  className="w-full py-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
-                >
-                  {isLoading ? "Processing..." : "Place Order"}
-                </button>
+                {(side === 'buy' ? depositBalanceQuote : depositBalance) === BigInt(0) ? (
+                  <Link href="/deposit">
+                    <button
+                      type="button"
+                      className="w-full py-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+                    >
+                      Deposit
+                    </button>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handlePlaceOrder}
+                    disabled={isLoading}
+                    className="w-full py-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+                  >
+                    {isLoading ? "Processing..." : "Place Order"}
+                  </button>
+                )}
               </>
             ) : (
               <button
