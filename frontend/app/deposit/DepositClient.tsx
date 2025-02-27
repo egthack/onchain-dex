@@ -322,16 +322,16 @@ export default function DepositClient() {
                   disabled={isLoading || !amount || amount === "0"}
                   className="w-full py-2 mt-2 bg-blue-500 text-white font-semibold rounded text-sm hover:shadow-glow transition-all"
                 >
-                  {isLoading ? "Processing..." : "Approve"}
+                  {isLoading ? "Processing..." : "Step1: Approve"}
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleDeposit}
                   disabled={isLoading || !amount || amount === "0"}
-                  className="w-full py-2 mt-2 bg-accent-green text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
+                  className="w-full py-2 mt-2 bg-yellow-500 text-black font-semibold rounded text-sm hover:shadow-glow transition-all"
                 >
-                  {isLoading ? "Processing..." : "Deposit"}
+                  {isLoading ? "Processing..." : "Step2: Deposit"}
                 </button>
               )
             )}
@@ -391,6 +391,9 @@ export default function DepositClient() {
                     {txHash}
                   </a>
                 </p>
+                {isApproved && (
+                  <p className="text-sm mt-2 text-yellow-500 font-bold">Please proceed with deposit.</p>
+                )}
               </>
             )}
             <div className="flex justify-center">
