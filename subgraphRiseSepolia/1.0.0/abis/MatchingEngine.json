@@ -272,6 +272,12 @@
         "internalType": "uint256",
         "name": "takerFee",
         "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "isMarketOrder",
+        "type": "bool"
       }
     ],
     "name": "TradeExecuted",

@@ -98,4 +98,5 @@ type Trade @entity {
   side: Int! # 0: Buy, 1: Sell
   timestamp: BigInt!
   transaction: Bytes!
+  isMarketOrder: Boolean! # 追加: マーケット注文かどうかを示すフラグ
 }
