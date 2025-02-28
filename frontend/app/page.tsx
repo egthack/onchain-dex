@@ -408,6 +408,15 @@ export default function TradingPage() {
       let priceBN: bigint;
       // const baseDecimals = getTokenDecimals(selectedPair.base);
       // const quoteDecimals = getTokenDecimals(selectedPair.quote);
+
+      // console.log("baseDecimals", baseDecimals);
+      // console.log("quoteDecimals", quoteDecimals);
+
+      console.log("フォームに入力されてhandlePlaceOrderに渡される値")
+      console.log("marketAmount", marketAmount);
+      console.log("marketPrice", marketPrice);
+      console.log("limitAmount", limitAmount);
+      console.log("limitPrice", limitPrice);
       
       if (orderType === "market") {
         if (!marketAmount || marketAmount === "0") {
@@ -467,6 +476,11 @@ export default function TradingPage() {
         side: side === "buy" ? 0 : 1,
         signature: signature
       };
+
+      console.log("handlePlaceOrder内でwalletClient.writeContractに渡される値")
+      console.log("tradeRequest", tradeRequest);
+      console.log(tradeRequest.amount);
+      console.log(tradeRequest.price);
 
       // TradingVault経由で注文を実行
       const hash = await walletClient.writeContract({
