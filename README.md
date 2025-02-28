@@ -2,7 +2,7 @@
 
 > **TL;DR:** RiseX is a high-performance, fully on-chain Central Limit Order Book DEX that delivers CEX-like speed with complete DeFi transparency by leveraging RISE's modular blockchain architecture and Celestia's data availability layer.
 
-![RiseX Demo](https://main.d20nbutm7dylce.amplifyapp.com/) – **[Live Demo Available Here](https://main.d20nbutm7dylce.amplifyapp.com/)**
+**[Live Demo Available Here](https://main.d20nbutm7dylce.amplifyapp.com/)**
 
 ## 1. Problem & Solution
 
@@ -72,11 +72,12 @@ RiseX is a feature-rich spot trading DEX with a robust on-chain order book and e
 Want to try RiseX immediately? Follow these simple steps:
 
 1. Visit our **[Live Demo](https://main.d20nbutm7dylce.amplifyapp.com/)**
-2. Connect your MetaMask wallet to RISE Sepolia testnet (Chain ID: 11155931)
+2. Connect your MetaMask wallet to RISE Sepolia testnet
 3. Use the built-in Faucet to get test tokens
-4. Start trading with market and limit orders!
+4. Deposit a test token in the Vault
+5. Start trading with market and limit orders!
 
-## 5. Complete Setup & Deployment Guide
+## 5. Setup & Deployment Guide
 
 For developers who want to set up the full project locally or deploy their own instance:
 
@@ -90,18 +91,19 @@ For developers who want to set up the full project locally or deploy their own i
 
 ```bash
 # 1. Clone repository and install dependencies
-git clone https://github.com/your-org/risex.git
-cd risex
+git clone https://github.com/egthack/onchain-dex.git
+cd onchain-dex/web3
 npm install
 
 # 2. Configure environment variables
-# Create .env with RISE_RPC_URL and PRIVATE_KEY
+# Create .env with PRIVATE_KEY, SEPOLIA_URL(RPC Node) and RISE_SEPOLIA_URL(RPC Node)
 
 # 3. Compile contracts
 npx hardhat compile
 
 # 4. Deploy to RISE testnet
-npx hardhat run scripts/deploy.js --network rise
+npx hardhat run scripts/deployDemo.ts --network riseSepolia
+npx hardhat run scripts/deployFaucet.ts --network riseSepolia
 ```
 
 The deployment script will output the addresses of the core contracts that you'll need for the next steps.
@@ -109,11 +111,21 @@ The deployment script will output the addresses of the core contracts that you'l
 ### 5.2 Subgraph Deployment with Goldsky
 
 ```bash
-# 1. Update subgraph.yaml with your contract addresses
+# 1. Export ABI
+cd web3
+npx hardhat run scripts/exportAbi.ts --network riseSepolia
 
-# 2. Deploy via Goldsky
-goldsky subgraph init
-goldsky subgraph deploy
+# 2. Navigate to subgraph directory
+cd ../subgraphRiseSepolia/1.0.0
+
+# 3. Update subgraph.yaml with your contract addresses(See the file under ../../deployments/riseSepolia/)
+
+# 4. Build subgraph
+npm run codegen
+npm run build
+
+# 4. Deploy via Goldsky
+goldsky subgraph deploy <subgraph-name>/<version> --path .
 ```
 
 This will index all orders, trades, and other events from the DEX contracts.
@@ -122,16 +134,16 @@ This will index all orders, trades, and other events from the DEX contracts.
 
 ```bash
 # 1. Navigate to frontend directory
-cd web
+cd frontend
 
 # 2. Install dependencies
 npm install
 
-# 3. Configure environment (.env file)
-# Set REACT_APP_RISE_RPC and REACT_APP_SUBGRAPH_URL
+# 3. Copy environment variables and set
+cp .env.example .env
 
 # 4. Start development server
-npm start
+npm run dev
 ```
 
 Visit http://localhost:3000 to access your local instance.
@@ -141,17 +153,17 @@ Visit http://localhost:3000 to access your local instance.
 RiseX's modular architecture can be understood as layers working together:
 
 ```
-┌─────────────────────┐
-│  Frontend dApp      │ User interface, order placement
-├─────────────────────┤
-│  Goldsky Subgraph   │ Real-time data indexing and queries
-├─────────────────────┤
-│  RISE (Execution)   │ Order matching, settlement, state updates
-├─────────────────────┤
+┌────────────────────────┐
+│  Frontend dApp         │ User interface, order placement
+├────────────────────────┤
+│  Goldsky Subgraph      │ Real-time data indexing and queries
+├────────────────────────┤
+│  RISE (Execution)      │ Order matching, settlement, state updates
+├────────────────────────┤
 │  Ethereum (Sequencing) │ Transaction ordering and consensus
-├─────────────────────┤
-│  Celestia (Data)    │ Data availability and integrity
-└─────────────────────┘
+├────────────────────────┤
+│  Celestia (Data)       │ Data availability and integrity
+└────────────────────────┘
 ```
 
 **Order flow:**
