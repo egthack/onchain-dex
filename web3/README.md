@@ -1,13 +1,5 @@
-# Sample Hardhat Project
+# Onchain DEX - RiseX
+This project is the implementation for the theme "Trustless CLOB DEX" in the Mammothon 
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a Hardhat Ignition module that deploys that contract.
 
-Try running some of the following tasks:
-
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat ignition deploy ./ignition/modules/Lock.ts
-```
+Onchain DEX hackathon and demonstrates the integration of smart contracts with Hardhat using ethers v6. The directory structure is organized for clarity and ease of deployment.
