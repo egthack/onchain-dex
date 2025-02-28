@@ -154,6 +154,8 @@ export function handleTradeExecuted(event: TradeExecutedEvent): void {
   trade.side = takerOrder != null ? takerOrder.side : 0;
   trade.timestamp = event.block.timestamp;
   trade.transaction = event.transaction.hash;
+  // 新たに追加：market orderだったかどうかのフラグを保存
+  trade.isMarketOrder = event.params.isMarketOrder;
   trade.save();
   
   if (lastTrade == null) {
