@@ -429,7 +429,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 sellOrderId,
                 incoming.base,
                 incoming.quote,
-                incoming.price,
+                sellOrder.price,
                 fill,
                 makerFee,
                 takerFee
@@ -562,7 +562,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 orderId,
                 incoming.base,
                 incoming.quote,
-                incoming.price,
+                buyOrder.price,
                 fill,
                 makerFee,
                 takerFee
