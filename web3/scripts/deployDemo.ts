@@ -84,18 +84,18 @@ const main = async () => {
     );
     await baseToken.waitForDeployment();
     console.log(`${token.symbol} deployed to:`, await baseToken.getAddress());
-
-    const txFaucet = await faucetContract.setMaxTokenAmount(baseToken.getAddress(), ethers.parseUnits(token.amount.toString(), token.decimals));
+    const tokenHalfAmount = ethers.parseUnits(token.amount.toString(), token.decimals) / BigInt(2);
+    const txFaucet = await faucetContract.setMaxTokenAmount(baseToken.getAddress(), tokenHalfAmount);
     await txFaucet.wait();
-    console.log(`Set faucet maxTokenAmount for ${token.symbol} to ${token.amount} tokens`);
+    console.log(`Set faucet maxTokenAmount for ${token.symbol} to ${tokenHalfAmount} tokens`);
 
-    const txFaucetApprove = await baseToken.approve(await faucetContract.getAddress(), token.amount);
+    const txFaucetApprove = await baseToken.approve(await faucetContract.getAddress(), tokenHalfAmount);
     await txFaucetApprove.wait();
-    console.log(`approved ${token.amount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
+    console.log(`approved ${tokenHalfAmount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
 
-    const txFaucetSend = await baseToken.transfer(await faucetContract.getAddress(), ethers.parseUnits(token.amount.toString(), token.decimals));
+    const txFaucetSend = await baseToken.transfer(await faucetContract.getAddress(), tokenHalfAmount);
     await txFaucetSend.wait();
-    console.log(`sent ${token.amount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
+    console.log(`sent ${tokenHalfAmount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
 
     deployedAddresses.contracts.tokens[token.symbol] =
       await baseToken.getAddress();
