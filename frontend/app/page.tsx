@@ -251,7 +251,7 @@ export default function TradingPage() {
       }
     }
     fetchBuyOrderBook();
-    const interval = setInterval(fetchBuyOrderBook, 2000);
+    const interval = setInterval(fetchBuyOrderBook, 1000);
     return () => clearInterval(interval);
   }, [selectedPair]);
 
@@ -301,7 +301,7 @@ export default function TradingPage() {
       }
     }
     fetchSellOrderBook();
-    const interval = setInterval(fetchSellOrderBook, 2000);
+    const interval = setInterval(fetchSellOrderBook, 1000);
     return () => clearInterval(interval);
   }, [selectedPair]);
 
@@ -352,7 +352,7 @@ export default function TradingPage() {
     }
 
     fetchLastFilledOrder();
-    const interval = setInterval(fetchLastFilledOrder, 2000);
+    const interval = setInterval(fetchLastFilledOrder, 1000);
     return () => clearInterval(interval);
   }, [selectedPair]);
 
@@ -613,7 +613,7 @@ export default function TradingPage() {
   // Update useEffect to depend on fetchMyOrders
   useEffect(() => {
     fetchMyOrders();
-    const interval = setInterval(fetchMyOrders, 10000); // polling every 10 seconds
+    const interval = setInterval(fetchMyOrders, 5000); // polling every 10 seconds
     return () => clearInterval(interval);
   }, [fetchMyOrders]);
 
