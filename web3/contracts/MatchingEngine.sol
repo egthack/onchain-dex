@@ -250,15 +250,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 ob.sellTree.insert(orderPrice);
             }
         }
-        emit OrderPlaced(
-            orderId,
-            user,
-            side,
-            base,
-            quote,
-            orderPrice,
-            amount
-        );
+        emit OrderPlaced(orderId, user, side, base, quote, orderPrice, amount);
         return orderId;
     }
 
@@ -395,8 +387,11 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             // 残高更新（切り捨て後の金額を使用）
             uint8 baseDecimals = IERC20Metadata(incoming.base).decimals();
             uint8 quoteDecimals = IERC20Metadata(incoming.quote).decimals();
-            uint256 scaledTakerNet = (truncatedTakerNet * (10 ** (baseDecimals - MINIMUM_DECIMALS)));
-            uint256 scaledMakerNet = (truncatedMakerNet * (10 ** (quoteDecimals - MINIMUM_DECIMALS))) / PRICE_PRECISION_FACTOR;
+            uint256 scaledTakerNet = (truncatedTakerNet *
+                (10 ** (baseDecimals - MINIMUM_DECIMALS)));
+            uint256 scaledMakerNet = (truncatedMakerNet *
+                (10 ** (quoteDecimals - MINIMUM_DECIMALS))) /
+                PRICE_PRECISION_FACTOR;
             _tradingVault.creditBalance(
                 incoming.user,
                 incoming.base,
@@ -530,14 +525,17 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             // 残高更新（切り捨て後の金額を使用）
             uint8 baseDecimals = IERC20Metadata(incoming.base).decimals();
             uint8 quoteDecimals = IERC20Metadata(incoming.quote).decimals();
-            uint256 scaledTakerNet = (truncatedTakerNet * (10 ** (quoteDecimals - MINIMUM_DECIMALS))) / PRICE_PRECISION_FACTOR;
+            uint256 scaledTakerNet = (truncatedTakerNet *
+                (10 ** (quoteDecimals - MINIMUM_DECIMALS))) /
+                PRICE_PRECISION_FACTOR;
             // console.log("truncatedTakerNet", truncatedTakerNet);
             // console.log("scaledTakerNet", scaledTakerNet);
             // console.log("PRICE_PRECISION_FACTOR", PRICE_PRECISION_FACTOR);
             // console.log("quoteDecimals", quoteDecimals);
             // console.log("MINIMUM_DECIMALS", MINIMUM_DECIMALS);
             // console.log("baseDecimals", baseDecimals);
-            uint256 scaledMakerNet = (truncatedMakerNet ) * (10 ** (baseDecimals - MINIMUM_DECIMALS));
+            uint256 scaledMakerNet = (truncatedMakerNet) *
+                (10 ** (baseDecimals - MINIMUM_DECIMALS));
             // console.log("scaledMakerNet", scaledMakerNet);
             // console.log("truncatedMakerNet", truncatedMakerNet);
             // console.log("PRICE_PRECISION_FACTOR", PRICE_PRECISION_FACTOR);
@@ -547,7 +545,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 incoming.user,
                 incoming.quote,
                 scaledTakerNet
-            ); 
+            );
             _tradingVault.creditBalance(
                 buyOrder.user,
                 incoming.base,
@@ -581,7 +579,14 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         uint256 originalAmount
     ) internal {
         order.amount = remaining;
-        order.active = (remaining > 0);
+
+        // マーケットオーダー（price=0）の場合、部分的にマッチングされても常に非アクティブにする
+        if (order.price == 0) {
+            order.active = false;
+        } else {
+            // リミットオーダーの場合、残量があればアクティブのままにする
+            order.active = (remaining > 0);
+        }
 
         if (order.price == 0 && remaining > 0) {
             uint256 refundAmount = 0;
@@ -596,13 +601,25 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 refundAmount = remaining;
                 refundToken = order.base;
             }
-            require(refundAmount == 0 || refundToken != address(0), "Invalid refund token");
+            require(
+                refundAmount == 0 || refundToken != address(0),
+                "Invalid refund token"
+            );
             if (refundAmount > 0) {
                 // console.log('refundAmount', refundAmount);
                 uint8 tokenDecimals = IERC20Metadata(refundToken).decimals();
-                uint256 scaledRefund = _truncateToMinimumDecimals(refundAmount) * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
-                _tradingVault.creditBalance(order.user, refundToken, scaledRefund);
+                uint256 scaledRefund = _truncateToMinimumDecimals(
+                    refundAmount
+                ) * (10 ** (tokenDecimals - MINIMUM_DECIMALS));
+                _tradingVault.creditBalance(
+                    order.user,
+                    refundToken,
+                    scaledRefund
+                );
             }
+
+            // マーケットオーダーが部分的にマッチングされた場合、残りはキャンセルされる
+            // 価格ツリーには追加しない
         }
     }
 
