@@ -423,7 +423,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             // console.log('takerFee', takerFee);
             // console.log('scaledTakerNet', scaledTakerNet);
             // console.log('scaledMakerNet', scaledMakerNet);
-
+            bool isMarketOrder = incoming.price == 0;
             emit TradeExecuted(
                 orderId,
                 sellOrderId,
@@ -432,7 +432,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 sellOrder.price,
                 fill,
                 makerFee,
-                takerFee
+                takerFee,
+                isMarketOrder
             );
         }
 
@@ -556,6 +557,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             // 手数料の収集（切り捨てなし）
             takerFeesCollected[incoming.quote] += takerFee;
             makerFeesCollected[incoming.base] += makerFee;
+            bool isMarketOrder = incoming.price == 0;
 
             emit TradeExecuted(
                 buyOrderId,
@@ -565,7 +567,8 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 buyOrder.price,
                 fill,
                 makerFee,
-                takerFee
+                takerFee,
+                isMarketOrder
             );
         }
 

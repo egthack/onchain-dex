@@ -14,7 +14,8 @@ event TradeExecuted(
     uint256 price,
     uint256 amount,
     uint256 makerFee,
-    uint256 takerFee
+    uint256 takerFee,
+    bool isMarketOrder
 );
 event OrderPlaced(
     uint256 indexed orderId,
