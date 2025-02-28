@@ -83,15 +83,12 @@ export default function TradingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [marketPrice, setMarketPrice] = useState("");
-
   const [depositBalance, setDepositBalance] = useState<bigint>(BigInt(0));
 
   const [depositBalanceQuote, setDepositBalanceQuote] = useState<bigint>(BigInt(0));
 
   const [modalOpen, setModalOpen] = useState(false);
 
-  const [marketPriceError, setMarketPriceError] = useState("");
   const [marketAmountError, setMarketAmountError] = useState("");
   const [limitPriceError, setLimitPriceError] = useState("");
   const [limitAmountError, setLimitAmountError] = useState("");
@@ -177,8 +174,8 @@ export default function TradingPage() {
   useEffect(() => {
     let warning = "";
     if (orderType === "market") {
-      if (side === "buy" && marketAmount && marketPrice) {
-        const estimatedTotal = Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice);
+      if (side === "buy" && marketAmount && latestPrice) {
+        const estimatedTotal = Number.parseFloat(marketAmount) * Number.parseFloat(latestPrice);
         const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
         if (estimatedTotal > availableUSDC) {
           warning = "Order total exceeds available USDC balance";
@@ -206,7 +203,7 @@ export default function TradingPage() {
       }
     }
     setBalanceWarning(warning);
-  }, [orderType, side, marketAmount, marketPrice, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
+  }, [orderType, side, marketAmount, latestPrice, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
 
   // Updated Buy Orders fetching hook
   useEffect(() => {
@@ -416,7 +413,6 @@ export default function TradingPage() {
 
       console.log("フォームに入力されてhandlePlaceOrderに渡される値")
       console.log("marketAmount", marketAmount);
-      console.log("marketPrice", marketPrice);
       console.log("limitAmount", limitAmount);
       console.log("limitPrice", limitPrice);
       
@@ -426,13 +422,8 @@ export default function TradingPage() {
           setIsLoading(false);
           return;
         }
-        if (!marketPrice || marketPrice === "0") {
-          setError("Please enter the price");
-            setIsLoading(false);
-            return;
-        }
         amountBN = BigInt(Math.floor(Number.parseFloat(marketAmount) * 1000000));
-        priceBN = BigInt(Math.floor(Number.parseFloat(marketPrice) * 100));
+        priceBN = BigInt(0);
       } else {
         if (!limitAmount || limitAmount === "0") {
           setError("Please enter the amount");
@@ -690,7 +681,7 @@ export default function TradingPage() {
   // New: Function to handle order book row click
   const handlePriceClick = (price: string) => {
     if (orderType === 'market') {
-      setMarketPrice(price);
+      // No need to update marketPrice for market orders
     } else {
       setLimitPrice(price);
     }
@@ -952,29 +943,6 @@ export default function TradingPage() {
                 {/* Market Order inputs (replica of the ones removed from left column) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="market-price-input" className="block text-xs font-medium text-gray-400 mb-1">
-                      Price ({selectedPair.quote})
-                    </label>
-                    <input
-                      id="market-price-input"
-                      type="number"
-                      step="0.01"
-                      className="trading-input"
-                      placeholder="0.00"
-                      value={marketPrice}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setMarketPrice(value);
-                        if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
-                          setMarketPriceError("Price can have up to 2 decimal places only");
-                        } else {
-                          setMarketPriceError("");
-                        }
-                      }}
-                    />
-                    {marketPriceError && <p className="text-xs text-red-500">{marketPriceError}</p>}
-                  </div>
-                  <div>
                     <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
                       Amount ({selectedPair.base})
                     </label>
@@ -1000,7 +968,7 @@ export default function TradingPage() {
                 </div>
                 <div className="text-xs text-gray-400">
                   Estimated Total: <span className="text-white">
-                    {marketAmount && marketPrice ? (Number.parseFloat(marketAmount) * Number.parseFloat(marketPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
+                    {marketAmount && latestPrice ? (Number.parseFloat(marketAmount) * Number.parseFloat(latestPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
                   </span>
                 </div>
                 {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
