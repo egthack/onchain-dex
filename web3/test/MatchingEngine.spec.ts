@@ -99,8 +99,6 @@ describe("MatchingEngine", function () {
     await depositToken(quoteTokenB, admin, user, vault, "1", 6);
     await depositToken(quoteTokenB, admin, trader, vault, "1", 6);
     await depositToken(quoteTokenB, admin, trader2, vault, "1", 6);
-
-
   });
 
   describe("Pair Management", function () {
@@ -126,24 +124,25 @@ describe("MatchingEngine", function () {
 
     it("should revert if base token has less than 6 decimals", async function () {
       // 低小数点トークンとquoteトークンのペアを追加
-      await expect(matchingEngine
-        .connect(admin)
-        .addPair(
-          await lowDecimalToken.getAddress(),
-          await quoteTokenA.getAddress()
-        )
+      await expect(
+        matchingEngine
+          .connect(admin)
+          .addPair(
+            await lowDecimalToken.getAddress(),
+            await quoteTokenA.getAddress()
+          )
       ).to.be.revertedWith("Base token decimals must be at least 6");
     });
 
     it("should revert if quote token has less than 6 decimals", async function () {
-
       // baseトークンと低小数点トークンのペアを追加
-      await expect(matchingEngine
-        .connect(admin)
-        .addPair(
-          await baseTokenB.getAddress(),
-          await lowDecimalToken.getAddress()
-        )
+      await expect(
+        matchingEngine
+          .connect(admin)
+          .addPair(
+            await baseTokenB.getAddress(),
+            await lowDecimalToken.getAddress()
+          )
       ).to.be.revertedWith("Quote token decimals must be at least 6");
     });
 
@@ -168,9 +167,18 @@ describe("MatchingEngine", function () {
   describe("Order Creation via Vault", function () {
     it("should create a single order properly through vault", async function () {
       // --- user によるトークン入金の準備 ---
-      await baseTokenA.connect(admin).transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
-      await baseTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
-      await vault.connect(user).deposit(await baseTokenA.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA
+        .connect(user)
+        .approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
+      await vault
+        .connect(user)
+        .deposit(
+          await baseTokenA.getAddress(),
+          ethers.parseUnits("100000", 18)
+        );
 
       // --- Trade Request の作成 (Buy order: side = 0) ---
       // この例では amount = 100, price = 1 とする
@@ -200,14 +208,30 @@ describe("MatchingEngine", function () {
     });
 
     it("should create multiple orders properly through vault", async function () {
-      await baseTokenA.connect(admin).transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
-      await baseTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
-      await vault.connect(user).deposit(await baseTokenA.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA
+        .connect(admin)
+        .transfer(await user.getAddress(), ethers.parseUnits("100000", 18));
+      await baseTokenA
+        .connect(user)
+        .approve(await vault.getAddress(), ethers.parseUnits("100000", 18));
+      await vault
+        .connect(user)
+        .deposit(
+          await baseTokenA.getAddress(),
+          ethers.parseUnits("100000", 18)
+        );
       await quoteTokenA
         .connect(admin)
         .transfer(await user.getAddress(), ethers.parseUnits("100000", 6));
-      await quoteTokenA.connect(user).approve(await vault.getAddress(), ethers.parseUnits("100000", 6));
-      await vault.connect(user).deposit(await quoteTokenA.getAddress(), ethers.parseUnits("100000", 6));
+      await quoteTokenA
+        .connect(user)
+        .approve(await vault.getAddress(), ethers.parseUnits("100000", 6));
+      await vault
+        .connect(user)
+        .deposit(
+          await quoteTokenA.getAddress(),
+          ethers.parseUnits("100000", 6)
+        );
 
       const sellRequests = [];
       for (let i = 0; i < 5; i++) {
@@ -357,6 +381,70 @@ describe("MatchingEngine", function () {
       const order = await matchingEngine.getOrder(orderId);
       expect(order.active).to.equal(false);
     });
+
+    it("should correctly update price tree after cancellation", async function () {
+      // 特定の価格で買い注文を作成
+      const buyPrice = 10000;
+      const tradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: 100,
+        price: buyPrice,
+      });
+      await vault.connect(user).executeTradeBatch([tradeRequest]);
+      const orderId = 0;
+
+      // 注文作成後のベスト買い価格を確認
+      const pairId = await matchingEngine.getPairId(
+        await baseTokenA.getAddress(),
+        await quoteTokenA.getAddress()
+      );
+      const bestBuyPriceBefore = await matchingEngine.getBestBuyPrice(pairId);
+      console.log("Best buy price before cancellation:", bestBuyPriceBefore);
+      expect(bestBuyPriceBefore).to.equal(buyPrice);
+
+      // 注文をキャンセル
+      await vault.connect(user).cancelOrder(orderId);
+
+      // キャンセル後の注文の状態を確認
+      const orderAfterCancel = await matchingEngine.getOrder(orderId);
+      console.log(
+        "Order active status after cancellation:",
+        orderAfterCancel.active
+      );
+
+      // キャンセル後のベスト買い価格を確認（ツリーから価格が削除されているはず）
+      const bestBuyPriceAfter = await matchingEngine.getBestBuyPrice(pairId);
+      console.log("Best buy price after cancellation:", bestBuyPriceAfter);
+      expect(bestBuyPriceAfter).to.equal(0);
+
+      // 同じ価格で新しい注文を作成
+      const newTradeRequest = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: 200,
+        price: buyPrice,
+      });
+      console.log("Creating new order with price:", buyPrice);
+      await vault.connect(trader).executeTradeBatch([newTradeRequest]);
+
+      // 新しい注文のIDを取得
+      const newOrderId = 0;
+      const a = await matchingEngine.getOrdersWithPagination(pairId, 0, 0, 10);
+      console.log("a:", a);
+      const newOrder = await matchingEngine.getOrder(newOrderId);
+      console.log("New order active status:", newOrder.active);
+      console.log("New order price:", newOrder.price.toString());
+
+      // 新しい注文作成後のベスト買い価格を確認（正しく更新されているはず）
+      const bestBuyPriceNew = await matchingEngine.getBestBuyPrice(pairId);
+      console.log("Best buy price after new order:", bestBuyPriceNew);
+      expect(bestBuyPriceNew).to.equal(buyPrice);
+    });
   });
 
   describe("Order Matching", function () {
@@ -411,13 +499,21 @@ describe("MatchingEngine", function () {
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
-      // user basetoken: + 0.0001 * 18^18, quote: 0.000001 * 0.02 * 100 = 0.000002 
-      expect(userBalanceBase).to.equal(ethers.parseUnits("1", 18) + ethers.parseUnits("0.0001", 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.000002", 6));
+      // user basetoken: + 0.0001 * 18^18, quote: 0.000001 * 0.02 * 100 = 0.000002
+      expect(userBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) + ethers.parseUnits("0.0001", 18)
+      );
+      expect(userBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.000002", 6)
+      );
 
-      // trader basetoken: -0.0001 * 10^18, quote: 0.000001 * 0.02 * 100 = 0.000002 
-      expect(traderBalanceBase).to.equal(ethers.parseUnits("1", 18) - ethers.parseUnits("0.0001", 18));
-      expect(traderBalanceQuote).to.equal(ethers.parseUnits("1", 6) + ethers.parseUnits("0.000002", 6));
+      // trader basetoken: -0.0001 * 10^18, quote: 0.000001 * 0.02 * 100 = 0.000002
+      expect(traderBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) - ethers.parseUnits("0.0001", 18)
+      );
+      expect(traderBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) + ethers.parseUnits("0.000002", 6)
+      );
     });
 
     // 全量マッチング
@@ -471,11 +567,19 @@ describe("MatchingEngine", function () {
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
       // user baseToken: -0.0001 * 18^18, quoteToken: 0.000001 * 0.02 * 100 = 0.000002
-      expect(userBalanceBase).to.equal(ethers.parseUnits("1", 18) - ethers.parseUnits("0.0001", 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits("1", 6) + ethers.parseUnits("0.000002", 6));
+      expect(userBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) - ethers.parseUnits("0.0001", 18)
+      );
+      expect(userBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) + ethers.parseUnits("0.000002", 6)
+      );
       // trader baseToken: +0.0001 * 18^18, quoteToken: -0.000002 * 6
-      expect(traderBalanceBase).to.equal(ethers.parseUnits("1", 18) + ethers.parseUnits("0.0001", 18));
-      expect(traderBalanceQuote).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.000002", 6));
+      expect(traderBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) + ethers.parseUnits("0.0001", 18)
+      );
+      expect(traderBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.000002", 6)
+      );
     });
 
     // 部分マッチング
@@ -518,12 +622,20 @@ describe("MatchingEngine", function () {
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       // user baseToken: +0.000001 * 500 * 18^18, quoteToken(executed:500, locked:500): -0.000001 * 0.01 * 1000 = -0.00001
-      expect(userBalanceBase).to.equal(ethers.parseUnits("1", 18) + ethers.parseUnits("0.0005", 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6));
+      expect(userBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) + ethers.parseUnits("0.0005", 18)
+      );
+      expect(userBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6)
+      );
 
       // trader baseToken: -0.000001 * 18^18, quoteToken: +0.000001 * 0.01 * 500 = 0.000005
-      expect(traderBalanceBase).to.equal(ethers.parseUnits("1", 18) - ethers.parseUnits("0.0005", 18));
-      expect(traderBalanceQuote).to.equal(ethers.parseUnits("1", 6) + ethers.parseUnits("0.000005", 6));
+      expect(traderBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) - ethers.parseUnits("0.0005", 18)
+      );
+      expect(traderBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) + ethers.parseUnits("0.000005", 6)
+      );
 
       // 繰り返しマッチング
       const tradeRequest3 = await createTradeRequest({
@@ -542,7 +654,6 @@ describe("MatchingEngine", function () {
       );
       expect(tradeExecutedEvents2.length).to.equal(2);
 
-
       const {
         userBalanceBase: userBalanceBase2,
         userBalanceQuote: userBalanceQuote2,
@@ -553,15 +664,25 @@ describe("MatchingEngine", function () {
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
       // user baseToken: +0.000001 * 500 * 18^18, quoteToken: -0.000001 * 0.01 * 1000 = -0.00001
-      expect(userBalanceBase2).to.equal(ethers.parseUnits("1", 18) + ethers.parseUnits("0.0005", 18) + ethers.parseUnits("0.0005", 18));
-      expect(userBalanceQuote2).to.equal(ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6));
+      expect(userBalanceBase2).to.equal(
+        ethers.parseUnits("1", 18) +
+          ethers.parseUnits("0.0005", 18) +
+          ethers.parseUnits("0.0005", 18)
+      );
+      expect(userBalanceQuote2).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6)
+      );
 
       // trader baseToken: 9900, quoteToken: 10100
-      expect(traderBalanceBase2).to.equal(ethers.parseUnits("1", 18) - ethers.parseUnits("0.0005", 18) - ethers.parseUnits("0.0005", 18));
-      expect(traderBalanceQuote2).to.equal(ethers.parseUnits("1", 6) + ethers.parseUnits("0.00001", 6));
+      expect(traderBalanceBase2).to.equal(
+        ethers.parseUnits("1", 18) -
+          ethers.parseUnits("0.0005", 18) -
+          ethers.parseUnits("0.0005", 18)
+      );
+      expect(traderBalanceQuote2).to.equal(
+        ethers.parseUnits("1", 6) + ethers.parseUnits("0.00001", 6)
+      );
     });
-
-
 
     describe("Market Orders", function () {
       it("should execute market buy order against existing sell orders", async function () {
@@ -599,16 +720,24 @@ describe("MatchingEngine", function () {
           quoteTokenA
         );
         // quote: - 500 , base: + 0.000001 * 0.01 * 500 / 2 = 0.0000025
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.00025', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.000005', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.00025", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.000005", 6)
+        );
 
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9900(75 locked, 25 sold), quote: 10050(50 returned)
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.001', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.001", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.000005", 6)
+        );
 
         // trader の50 locked 注文をキャンセルして返金される金額を確認
         await vault.connect(trader).cancelOrder(0);
@@ -617,8 +746,12 @@ describe("MatchingEngine", function () {
           userBalanceQuote: traderBalanceQuote2,
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: 9975(9900 + 25 bought 50 locked), quote: 10050(50 returned)
-        expect(traderBalanceBase2).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.00025', 18));
-        expect(traderBalanceQuote2).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
+        expect(traderBalanceBase2).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.00025", 18)
+        );
+        expect(traderBalanceQuote2).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.000005", 6)
+        );
       });
 
       it("should execute market sell order against existing buy orders", async function () {
@@ -657,20 +790,25 @@ describe("MatchingEngine", function () {
           quoteTokenA
         );
         // base: + 0.000001 * 500 = 0.0005, quote: - 0.000001 * 0.01 * 500 = -0.000005
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0005', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.000005', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.0005", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.000005", 6)
+        );
 
         const {
           userBalanceBase: traderBalanceBase,
           userBalanceQuote: traderBalanceQuote,
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
         // base: - 0.000001 * 500 = -0.0005, quote: + 0.000001 * 0.01 * 1000 = 0.00001(locked)
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0005', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.0005", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6)
+        );
       });
-
-
-
 
       // 買いの成行注文後、返金があるパターン
       it("should execute market sell order against existing sell orders and not match all", async function () {
@@ -713,12 +851,20 @@ describe("MatchingEngine", function () {
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
         // base: + 0.000001 * 1000 = 0.001, quote: - 0.000001 * 0.01 * 2000 = -0.00002
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.001', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00002', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.001", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00002", 6)
+        );
         // traderの注文はすべて約定する
         // base: - 0.000001 * 1000 = 0.001, quote: + 0.000001 * 0.01 * 2000 = 0.00002
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.001', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00002', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.001", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.00002", 6)
+        );
       });
 
       // 売りの成行注文後、返金があるパターン
@@ -762,15 +908,21 @@ describe("MatchingEngine", function () {
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
         // base: - 0.000001 * 1000 = - 0.001, quote: - 0.000001 * 0.01 * 1000 = -0.00001
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.001', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00001', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.001", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.00001", 6)
+        );
         // traderの注文はすべて約定する
         // base: + 0.000001 * 1000 = 0.001, quote: - 0.000001 * 0.01 * 1000 = -0.00001
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.001', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.001", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6)
+        );
       });
-
-
 
       // 買いの成行注文後、返金があるパターンの桁上げ
       it("should execute large market sell order against existing sell orders and not match all", async function () {
@@ -813,12 +965,20 @@ describe("MatchingEngine", function () {
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
         // base: + 0.000001 * 10000 = 0.01, quote: - 0.000001 * 0.01 * 200000 = -0.0002
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.01', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.002', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.01", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.002", 6)
+        );
         // traderの注文はすべて約定する
         // base: - 0.000001 * 10000 = 0.0001, quote: + 0.000001 * 0.01 * 200000 = 0.002
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.01', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.002', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.01", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.002", 6)
+        );
       });
 
       // 売りの成行注文後、返金があるパターンの桁上げ
@@ -862,12 +1022,20 @@ describe("MatchingEngine", function () {
         } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
         // base: - 0.000001 * 10000 = - 0.001, quote: - 0.000001 * 0.01 * 100000 = -0.001
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.01', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.001', 6));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.01", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.001", 6)
+        );
         // traderの注文はすべて約定する
         // base: + 0.000001 * 10000 = 0.01, quote: - 0.000001 * 0.01 * 100000 = -0.001
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.01', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.001', 6));
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.01", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.001", 6)
+        );
       });
 
       // 成行買い注文後、最良売り注文が削除されることの確認
@@ -932,8 +1100,12 @@ describe("MatchingEngine", function () {
           quoteTokenA
         );
         // base: + 0.000001 * 100 = 0.001, quote: - 0.000001 * 0.01 * 1000 = -0.00001
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0001', 18)); // 初期値10000 + 買った100
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00001', 6)); // 初期値10000 - 支払った100
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.0001", 18)
+        ); // 初期値10000 + 買った100
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00001", 6)
+        ); // 初期値10000 - 支払った100
       });
 
       // 売り板に、priceが1000と2000でamountがそれぞれ100の注文を出し、成行買い注文で全て買い上げる
@@ -945,7 +1117,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 100,
-          price: 1000
+          price: 1000,
         });
         await vault.connect(trader).executeTradeBatch([sellOrder1]);
 
@@ -955,7 +1127,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 100,
-          price: 2000
+          price: 2000,
         });
         await vault.connect(trader).executeTradeBatch([sellOrder2]);
 
@@ -966,7 +1138,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 300000,
-          price: 0 // Market order
+          price: 0, // Market order
         });
         await vault.connect(user).executeTradeBatch([marketBuyOrder]);
 
@@ -984,15 +1156,31 @@ describe("MatchingEngine", function () {
         expect(order2.active).to.equal(false);
 
         // 約定後の残高チェック
-        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
         // + 200 * 0.000001 = 0.0002
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.0002", 18)
+        );
         //  - 300000 * 0.01 * 0.000001 = -0.000003
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.003', 6));
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.003", 6)
+        );
 
-        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.003', 6));
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.0002", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.003", 6)
+        );
       });
 
       // 買い板に、priceが1000と2000でamountがそれぞれ100の注文を出し、成行売り注文で全て売り払う
@@ -1004,7 +1192,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 100,
-          price: 1000
+          price: 1000,
         });
         await vault.connect(trader).executeTradeBatch([buyOrder1]);
 
@@ -1014,7 +1202,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 100,
-          price: 2000
+          price: 2000,
         });
         await vault.connect(trader).executeTradeBatch([buyOrder2]);
 
@@ -1025,7 +1213,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 200,
-          price: 0 // Market order
+          price: 0, // Market order
         });
         await vault.connect(user).executeTradeBatch([marketSellOrder]);
 
@@ -1043,9 +1231,18 @@ describe("MatchingEngine", function () {
         expect(order2.active).to.equal(false);
 
         // 約定後の残高チェック
-        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.003', 6));
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.0002", 18)
+        );
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.003", 6)
+        );
       });
 
       // 限度注文で買い板を食う（sell orders に対して limit buy order）のシナリオ
@@ -1057,7 +1254,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 100,
-          price: 20
+          price: 20,
         });
         await vault.connect(trader).executeTradeBatch([sellOrder1]);
 
@@ -1067,7 +1264,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 100,
-          price: 20
+          price: 20,
         });
         await vault.connect(trader).executeTradeBatch([sellOrder2]);
 
@@ -1078,7 +1275,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 200,
-          price: 20
+          price: 20,
         });
         await vault.connect(user).executeTradeBatch([limitBuyOrder]);
 
@@ -1096,14 +1293,30 @@ describe("MatchingEngine", function () {
         expect(order2.active).to.equal(false);
 
         // 約定後の残高チェック
-        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.0002", 18)
+        );
         // 200 * 20 * 0.000001 * 0.01 = 0.00004
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00004', 6));
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00004", 6)
+        );
 
-        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00004', 6));
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.0002", 18)
+        );
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.00004", 6)
+        );
       });
 
       // 限度注文で売り板を食う（buy orders に対して limit sell order）のシナリオ
@@ -1115,7 +1328,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 100,
-          price: 20
+          price: 20,
         });
         await vault.connect(trader).executeTradeBatch([buyOrder1]);
 
@@ -1125,7 +1338,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 0, // Buy order
           amount: 100,
-          price: 20
+          price: 20,
         });
         await vault.connect(trader).executeTradeBatch([buyOrder2]);
 
@@ -1136,7 +1349,7 @@ describe("MatchingEngine", function () {
           quote: quoteTokenA,
           side: 1, // Sell order
           amount: 200,
-          price: 20
+          price: 20,
         });
         await vault.connect(user).executeTradeBatch([limitSellOrder]);
 
@@ -1154,40 +1367,60 @@ describe("MatchingEngine", function () {
         expect(order2.active).to.equal(false);
 
         // 約定後の残高チェック
-        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(vault, user, baseTokenA, quoteTokenA);
+        const { userBalanceBase, userBalanceQuote } = await getTokenBalances(
+          vault,
+          user,
+          baseTokenA,
+          quoteTokenA
+        );
         // 200 * 0.000001 = 0.0002
-        expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.0002', 18));
+        expect(userBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) - ethers.parseUnits("0.0002", 18)
+        );
         // 200 * 20 * 0.01 * 0.000001 = 0.00004
-        expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.00004', 6));
+        expect(userBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) + ethers.parseUnits("0.00004", 6)
+        );
 
-        const { userBalanceBase: traderBalanceBase, userBalanceQuote: traderBalanceQuote } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
-        expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.0002', 18));
+        const {
+          userBalanceBase: traderBalanceBase,
+          userBalanceQuote: traderBalanceQuote,
+        } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
+        expect(traderBalanceBase).to.equal(
+          ethers.parseUnits("1", 18) + ethers.parseUnits("0.0002", 18)
+        );
         // 200 * 20 * 0.01 * 0.000001 = 0.00004
-        expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.00004', 6));
+        expect(traderBalanceQuote).to.equal(
+          ethers.parseUnits("1", 6) - ethers.parseUnits("0.00004", 6)
+        );
       });
     });
 
     // マッチング順のチェック　買い ->　売り 成行
     it("should match orders correctly with matching order", async function () {
       // 買い注文を出す,あえて価格を順番通りにしていない
-      const orderPriceList = [{
-        price: 230,
-        amount: 1000,
-      }, {
-        price: 300,
-        amount: 1000,
-      }, {
-        price: 30,
-        amount: 1000,
-      },
-      {
-        price: 40,
-        amount: 1000,
-      },
-      {
-        price: 100,
-        amount: 1000,
-      }]
+      const orderPriceList = [
+        {
+          price: 230,
+          amount: 1000,
+        },
+        {
+          price: 300,
+          amount: 1000,
+        },
+        {
+          price: 30,
+          amount: 1000,
+        },
+        {
+          price: 40,
+          amount: 1000,
+        },
+        {
+          price: 100,
+          amount: 1000,
+        },
+      ];
 
       for (const order of orderPriceList) {
         const buyOrder = await createTradeRequest({
@@ -1219,7 +1452,9 @@ describe("MatchingEngine", function () {
       );
       // マッチングは価格の高い順に行われるはず
       // orderPriceListの価格の高いものから並べる
-      const sortedOrderPriceList = orderPriceList.sort((a, b) => b.price - a.price);
+      const sortedOrderPriceList = orderPriceList.sort(
+        (a, b) => b.price - a.price
+      );
 
       expect(tradeExecutedEvents.length).to.equal(sortedOrderPriceList.length);
 
@@ -1228,29 +1463,33 @@ describe("MatchingEngine", function () {
         const price = event.args.price;
         expect(price).to.equal(sortedOrderPriceList[i].price);
       }
-    })
+    });
 
     // マッチング順のチェック　売り ->　買い　成行
     it("should match orders correctly with matching order", async function () {
       // 売り注文を出す,あえて価格を順番通りにしていない
-      const orderPriceList = [{
-        price: 230,
-        amount: 1000,
-      }, {
-        price: 300,
-        amount: 1000,
-      }, {
-        price: 30,
-        amount: 1000,
-      },
-      {
-        price: 40,
-        amount: 1000,
-      },
-      {
-        price: 100,
-        amount: 1000,
-      }]
+      const orderPriceList = [
+        {
+          price: 230,
+          amount: 1000,
+        },
+        {
+          price: 300,
+          amount: 1000,
+        },
+        {
+          price: 30,
+          amount: 1000,
+        },
+        {
+          price: 40,
+          amount: 1000,
+        },
+        {
+          price: 100,
+          amount: 1000,
+        },
+      ];
 
       for (const order of orderPriceList) {
         const sellOrder = await createTradeRequest({
@@ -1282,36 +1521,42 @@ describe("MatchingEngine", function () {
       );
       // マッチングは価格の低い順に行われるはず
       // orderPriceListの価格の低いものから並べる
-      const sortedOrderPriceList = orderPriceList.sort((a, b) => a.price - b.price);
+      const sortedOrderPriceList = orderPriceList.sort(
+        (a, b) => a.price - b.price
+      );
 
       for (let i = 0; i < tradeExecutedEvents.length; i++) {
         const event = tradeExecutedEvents[i];
         const price = event.args.price;
         expect(price).to.equal(sortedOrderPriceList[i].price);
       }
-    })
+    });
 
     // マッチング順のチェック　買い ->　売り　指値
     it("should match orders correctly with matching order", async function () {
       // 買い注文を出す,あえて価格を順番通りにしていない
-      const orderPriceList = [{
-        price: 230,
-        amount: 1000,
-      }, {
-        price: 300,
-        amount: 1000,
-      }, {
-        price: 30,
-        amount: 1000,
-      },
-      {
-        price: 40,
-        amount: 1000,
-      },
-      {
-        price: 100,
-        amount: 1000,
-      }]
+      const orderPriceList = [
+        {
+          price: 230,
+          amount: 1000,
+        },
+        {
+          price: 300,
+          amount: 1000,
+        },
+        {
+          price: 30,
+          amount: 1000,
+        },
+        {
+          price: 40,
+          amount: 1000,
+        },
+        {
+          price: 100,
+          amount: 1000,
+        },
+      ];
 
       for (const order of orderPriceList) {
         const buyOrder = await createTradeRequest({
@@ -1343,7 +1588,9 @@ describe("MatchingEngine", function () {
       );
       // マッチングは価格の高い順に行われるはず
       // orderPriceListの価格の高いものから並べる
-      const sortedOrderPriceList = orderPriceList.sort((a, b) => b.price - a.price);
+      const sortedOrderPriceList = orderPriceList.sort(
+        (a, b) => b.price - a.price
+      );
 
       expect(tradeExecutedEvents.length).to.equal(sortedOrderPriceList.length);
 
@@ -1352,30 +1599,33 @@ describe("MatchingEngine", function () {
         const price = event.args.price;
         expect(price).to.equal(sortedOrderPriceList[i].price);
       }
-    })
-
+    });
 
     // マッチング順のチェック　売り ->　買い　指値
     it("should match orders correctly with matching order", async function () {
       // 売り注文を出す,あえて価格を順番通りにしていない
-      const orderPriceList = [{
-        price: 230,
-        amount: 100,
-      }, {
-        price: 300,
-        amount: 100,
-      }, {
-        price: 30,
-        amount: 100,
-      },
-      {
-        price: 40,
-        amount: 100,
-      },
-      {
-        price: 100,
-        amount: 100,
-      }]
+      const orderPriceList = [
+        {
+          price: 230,
+          amount: 100,
+        },
+        {
+          price: 300,
+          amount: 100,
+        },
+        {
+          price: 30,
+          amount: 100,
+        },
+        {
+          price: 40,
+          amount: 100,
+        },
+        {
+          price: 100,
+          amount: 100,
+        },
+      ];
 
       for (const order of orderPriceList) {
         const sellOrder = await createTradeRequest({
@@ -1407,15 +1657,16 @@ describe("MatchingEngine", function () {
       );
       // マッチングは価格の低い順に行われるはず
       // orderPriceListの価格の低いものから並べる
-      const sortedOrderPriceList = orderPriceList.sort((a, b) => a.price - b.price);
+      const sortedOrderPriceList = orderPriceList.sort(
+        (a, b) => a.price - b.price
+      );
 
       for (let i = 0; i < tradeExecutedEvents.length; i++) {
         const event = tradeExecutedEvents[i];
         const price = event.args.price;
         expect(price).to.equal(sortedOrderPriceList[i].price);
       }
-    })
-
+    });
   });
 
   describe("Bulk Matching", function () {
@@ -1499,16 +1750,24 @@ describe("MatchingEngine", function () {
         quoteTokenA
       );
       // base: + 0.000001 * 2000000 /10 = 0.002, quote: - 0.000001 * 0.01 * 2000000 = -0.00002
-      expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.2', 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.02', 6));
+      expect(userBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) + ethers.parseUnits("0.2", 18)
+      );
+      expect(userBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.02", 6)
+      );
 
       const {
         userBalanceBase: traderBalanceBase,
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
       // base: - 0.000001 * 2000000 /10 = -0.002, quote: + 0.000001 * 0.01 * 2000000 = 0.00002
-      expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.2', 18));
-      expect(traderBalanceQuote).to.equal(ethers.parseUnits('1', 6) + ethers.parseUnits('0.02', 6));
+      expect(traderBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) - ethers.parseUnits("0.2", 18)
+      );
+      expect(traderBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) + ethers.parseUnits("0.02", 6)
+      );
     });
 
     // 指値で板を食うマッチング(実際のシナリオテスト)
@@ -1536,7 +1795,12 @@ describe("MatchingEngine", function () {
         await baseTokenA.getAddress(),
         await quoteTokenA.getAddress()
       );
-      const sellOrders = await matchingEngine.getOrdersWithPagination(pairId, 1, 0, 200);
+      const sellOrders = await matchingEngine.getOrdersWithPagination(
+        pairId,
+        1,
+        0,
+        200
+      );
       expect(sellOrders[0].length).to.equal(200);
 
       const tradeRequest = await createTradeRequest({
@@ -1570,14 +1834,117 @@ describe("MatchingEngine", function () {
         userBalanceQuote: traderBalanceQuote,
       } = await getTokenBalances(vault, trader, baseTokenA, quoteTokenA);
 
+      expect(userBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) + ethers.parseUnits("0.1", 18)
+      );
+      expect(userBalanceQuote).to.equal(
+        ethers.parseUnits("1", 6) - ethers.parseUnits("0.4", 6)
+      );
 
-      expect(userBalanceBase).to.equal(ethers.parseUnits('1', 18) + ethers.parseUnits('0.1', 18));
-      expect(userBalanceQuote).to.equal(ethers.parseUnits('1', 6) - ethers.parseUnits('0.4', 6));
-
-
-
-      expect(traderBalanceBase).to.equal(ethers.parseUnits('1', 18) - ethers.parseUnits('0.2', 18));
+      expect(traderBalanceBase).to.equal(
+        ethers.parseUnits("1", 18) - ethers.parseUnits("0.2", 18)
+      );
       expect(traderBalanceQuote).to.equal(1050500);
+    });
+  });
+
+  describe("Market Order Handling", function () {
+    it("should properly handle market buy order with partial fill", async function () {
+      // 売り注文を作成（少量）
+      const sellPrice = 10000;
+      const sellAmount = 50; // 少量の売り注文
+      const sellTradeRequest = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1, // Sell
+        amount: sellAmount,
+        price: sellPrice,
+      });
+      await vault.connect(trader).executeTradeBatch([sellTradeRequest]);
+
+      // 買いの成行注文を作成（同じ量）
+      const buyAmount = 50; // 売り注文と同じ量
+      const buyTradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: buyAmount,
+        price: 0, // 成行注文
+      });
+
+      // 買い注文を実行
+      await vault.connect(user).executeTradeBatch([buyTradeRequest]);
+
+      // 注文IDを取得
+      const sellOrderId = 0;
+      const buyOrderId = 1;
+
+      // 注文の状態を確認
+      const sellOrder = await matchingEngine.getOrder(sellOrderId);
+      const buyOrder = await matchingEngine.getOrder(buyOrderId);
+
+      console.log("Sell order active status:", sellOrder.active);
+      console.log("Sell order remaining amount:", sellOrder.amount.toString());
+      console.log("Buy order active status:", buyOrder.active);
+      console.log("Buy order remaining amount:", buyOrder.amount.toString());
+
+      // 売り注文は完全にマッチングされているはず
+      expect(sellOrder.active).to.equal(false);
+      expect(sellOrder.amount).to.equal(0);
+
+      // 買い注文も完全にマッチングされているはず
+      expect(buyOrder.active).to.equal(false);
+      expect(buyOrder.amount).to.equal(0);
+    });
+
+    it("should properly handle market sell order with partial fill", async function () {
+      // 買い注文を作成（少量）
+      const buyPrice = 10000;
+      const buyAmount = 50; // 少量の買い注文
+      const buyTradeRequest = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: buyAmount,
+        price: buyPrice,
+      });
+      await vault.connect(trader).executeTradeBatch([buyTradeRequest]);
+
+      // 売りの成行注文を作成（大量）
+      const sellAmount = 100; // 買い注文より多い量
+      const sellTradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1, // Sell
+        amount: sellAmount,
+        price: 0, // 成行注文
+      });
+      await vault.connect(user).executeTradeBatch([sellTradeRequest]);
+
+      // 注文IDを取得
+      const buyOrderId = 0;
+      const sellOrderId = 1;
+
+      // 注文の状態を確認
+      const buyOrder = await matchingEngine.getOrder(buyOrderId);
+      const sellOrder = await matchingEngine.getOrder(sellOrderId);
+
+      console.log("Buy order active status:", buyOrder.active);
+      console.log("Buy order remaining amount:", buyOrder.amount.toString());
+      console.log("Sell order active status:", sellOrder.active);
+      console.log("Sell order remaining amount:", sellOrder.amount.toString());
+
+      // 買い注文は完全にマッチングされているはず
+      expect(buyOrder.active).to.equal(false);
+      expect(buyOrder.amount).to.equal(0);
+
+      // 売り注文は部分的にマッチングされ、残りはキャンセルされるべき
+      expect(sellOrder.active).to.equal(false);
+      expect(sellOrder.amount).to.be.gt(0);
     });
   });
 });
