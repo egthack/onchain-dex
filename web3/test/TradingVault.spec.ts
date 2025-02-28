@@ -450,13 +450,21 @@ describe("TradingVault", function () {
         base: baseToken,
         quote: usdcToken,
         side: 0, // Buy
-        amount: 100,
+        amount: 1000,
         price: 1, // 価格は小数点以下2桁精度（1 = 0.01）
       });
 
       // 注文実行
       await vault.connect(user).executeTradeBatch([tradeRequest]);
       const orderId = 0;
+
+      // キャンセル前の残高
+      const balanceBefore = await vault.getBalance(
+        await user.getAddress(),
+        await usdcToken.getAddress()
+      );
+      // 0.000001 * 1000 * 0.01 = 0.00001
+      expect(balanceBefore).to.equal(ethers.parseUnits("1000", 6) - ethers.parseUnits("0.00001", 6));
 
       // 注文キャンセル
       await vault.connect(user).cancelOrder(orderId);
@@ -468,7 +476,7 @@ describe("TradingVault", function () {
       );
 
       // 注文時にロックされた金額が正確に返金されていることを確認
-      // 100 * 1 = 100 (100 units of usdcToken)
+      // 1000 * 1 = 1000 (1000 units of usdcToken)
       const expectedBalance = depositAmount;
       expect(balanceAfter).to.equal(expectedBalance);
 
@@ -488,20 +496,13 @@ describe("TradingVault", function () {
         .connect(user)
         .deposit(await baseToken.getAddress(), depositAmount);
 
-      // キャンセル前の残高を確認
-      // const balanceBefore1 = await vault.getBalance(
-      //   await user.getAddress(),
-      //   await baseToken.getAddress()
-      // );
-
-      // console.log("balanceBefore1", balanceBefore1);
       // 取引リクエスト作成：Sell注文
       const tradeRequest = await createTradeRequest({
         user: user,
         base: baseToken,
         quote: usdcToken,
         side: 1, // Sell
-        amount: 10, // 0.00001
+        amount: 1000, // 0.001
         price: 100,
       });
 
@@ -517,7 +518,7 @@ describe("TradingVault", function () {
 
       // ロック量は10（0.00001 ETH）
       expect(balanceBefore).to.equal(
-        depositAmount - BigInt(10) * BigInt(10 ** 12)
+        depositAmount - ethers.parseUnits("0.001", 18)
       );
 
       // 注文キャンセル
@@ -535,6 +536,7 @@ describe("TradingVault", function () {
       // 注文時にロックされた金額が返金されるはず
       const expectedBalance = depositAmount;
       expect(balanceAfter).to.equal(expectedBalance);
+      // console.log("expectedBalance", expectedBalance);
     });
   });
 });
