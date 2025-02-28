@@ -1,4 +1,6 @@
 # RiseX – Full On-Chain CLOB DEX on the RISE Blockchain
+<img width="1920" alt="image" src="https://github.com/user-attachments/assets/e0653fcf-1b63-47a1-abf2-49e1d7b0d56a" />
+
 
 > **TL;DR:** RiseX is a high-performance, fully on-chain Central Limit Order Book DEX that delivers CEX-like speed with complete DeFi transparency by leveraging RISE's modular blockchain architecture and Celestia's data availability layer.
 
