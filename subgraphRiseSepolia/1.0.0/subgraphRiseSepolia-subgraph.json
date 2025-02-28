@@ -420,8 +420,8 @@
   "instances": [
     {
       "abi": "TradingVault",
-      "address": "0x2e3523E2e8D600F4179bc151FDbDE39bA3Dd4FD7",
-      "startBlock": 5570638,
+      "address": "0xaA430982A79F6907c86a77adECbb3895fFE80ae2",
+      "startBlock": 5625537,
       "chain": "rise-sepolia"
     }
   ],

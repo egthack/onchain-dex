@@ -34,13 +34,13 @@ export function fetchTokenInfo(tokenAddress: Address): void {
     
     // 既知のトークンアドレスの場合はハードコーディングする
     let lowerTokenId = tokenId.toLowerCase();
-    if (lowerTokenId == "0xaC9396e4FD04bD298E5d5ECb3bA712137580F669") {
+    if (lowerTokenId == "0x27F1F278c03f6C027C1Da24CB5090a50FeB3BBe3") {
       token.symbol = "WETH";
-    } else if (lowerTokenId == "0xCBEAb9095EB6505551c5aF1cb685f31A0bc6124a") {
+    } else if (lowerTokenId == "0x21Dd0A0Bc9D9696877eCb444d5306D6675e228cC") {
       token.symbol = "USDC";
-    } else if (lowerTokenId == "0x08c024d64A212d1e78240Cf642318249ABE077D4") {
+    } else if (lowerTokenId == "0xE7bDa28014BEb92B7657742de4AfDF85FA892640") {
       token.symbol = "WBTC";
-    } else if (lowerTokenId == "0xc23b5bb2b95311041DB97C1032C9BCaE592BdF5C") {
+    } else if (lowerTokenId == "0x58cc332FB73FE6B96F2EbFf3A6dc4De6dF0fC751") {
       token.symbol = "POL";
     } else {
       // 不明なトークンの場合は短縮アドレスを使用

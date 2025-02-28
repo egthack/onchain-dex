@@ -4,7 +4,7 @@ import { Token } from "../generated/schema";
 // 既知のトークン情報を初期化する関数
 export function initializeKnownTokens(): void {
   // WETH
-  let wethId = "0xaC9396e4FD04bD298E5d5ECb3bA712137580F669";
+  let wethId = "0x27F1F278c03f6C027C1Da24CB5090a50FeB3BBe3";
   let weth = Token.load(wethId);
   if (weth == null) {
     weth = new Token(wethId);
@@ -18,7 +18,7 @@ export function initializeKnownTokens(): void {
   }
 
   // USDC
-  let usdcId = "0xCBEAb9095EB6505551c5aF1cb685f31A0bc6124a";
+  let usdcId = "0x21Dd0A0Bc9D9696877eCb444d5306D6675e228cC";
   let usdc = Token.load(usdcId);
   if (usdc == null) {
     usdc = new Token(usdcId);
@@ -32,7 +32,7 @@ export function initializeKnownTokens(): void {
   }
 
   // WBTC
-  let wbtcId = "0x08c024d64A212d1e78240Cf642318249ABE077D4";
+  let wbtcId = "0xE7bDa28014BEb92B7657742de4AfDF85FA892640";
   let wbtc = Token.load(wbtcId);
   if (wbtc == null) {
     wbtc = new Token(wbtcId);
@@ -46,7 +46,7 @@ export function initializeKnownTokens(): void {
   }
 
   // POL
-  let polId = "0xc23b5bb2b95311041DB97C1032C9BCaE592BdF5C";
+  let polId = "0x58cc332FB73FE6B96F2EbFf3A6dc4De6dF0fC751";
   let pol = Token.load(polId);
   if (pol == null) {
     pol = new Token(polId);
