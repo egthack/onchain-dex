@@ -433,9 +433,7 @@ describe("MatchingEngine", function () {
       await vault.connect(trader).executeTradeBatch([newTradeRequest]);
 
       // 新しい注文のIDを取得
-      const newOrderId = 0;
-      const a = await matchingEngine.getOrdersWithPagination(pairId, 0, 0, 10);
-      console.log("a:", a);
+      const newOrderId = 1;
       const newOrder = await matchingEngine.getOrder(newOrderId);
       console.log("New order active status:", newOrder.active);
       console.log("New order price:", newOrder.price.toString());
