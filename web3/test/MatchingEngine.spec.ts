@@ -1220,10 +1220,9 @@ describe("MatchingEngine", function () {
       // マッチングは価格の高い順に行われるはず
       // orderPriceListの価格の高いものから並べる
       const sortedOrderPriceList = orderPriceList.sort((a, b) => b.price - a.price);
-  
+
       expect(tradeExecutedEvents.length).to.equal(sortedOrderPriceList.length);
 
-      console.log(tradeExecutedEvents.map(event => event.args.price));
       for (let i = 0; i < tradeExecutedEvents.length; i++) {
         const event = tradeExecutedEvents[i];
         const price = event.args.price;
@@ -1284,13 +1283,139 @@ describe("MatchingEngine", function () {
       // マッチングは価格の低い順に行われるはず
       // orderPriceListの価格の低いものから並べる
       const sortedOrderPriceList = orderPriceList.sort((a, b) => a.price - b.price);
-  
+
       for (let i = 0; i < tradeExecutedEvents.length; i++) {
         const event = tradeExecutedEvents[i];
         const price = event.args.price;
         expect(price).to.equal(sortedOrderPriceList[i].price);
       }
     })
+
+    // マッチング順のチェック　買い ->　売り　指値
+    it("should match orders correctly with matching order", async function () {
+      // 買い注文を出す,あえて価格を順番通りにしていない
+      const orderPriceList = [{
+        price: 230,
+        amount: 1000,
+      }, {
+        price: 300,
+        amount: 1000,
+      }, {
+        price: 30,
+        amount: 1000,
+      },
+      {
+        price: 40,
+        amount: 1000,
+      },
+      {
+        price: 100,
+        amount: 1000,
+      }]
+
+      for (const order of orderPriceList) {
+        const buyOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 0, // Buy
+          amount: order.amount,
+          price: order.price,
+        });
+        await vault.connect(user).executeTradeBatch([buyOrder]);
+      }
+
+      // 売り注文を出す、すべて約定させる
+      const sellOrder = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1, // Sell
+        amount: 100000,
+        price: 10, // Market order
+      });
+      await vault.connect(trader).executeTradeBatch([sellOrder]);
+
+      // マッチング順のチェック
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      // マッチングは価格の高い順に行われるはず
+      // orderPriceListの価格の高いものから並べる
+      const sortedOrderPriceList = orderPriceList.sort((a, b) => b.price - a.price);
+
+      expect(tradeExecutedEvents.length).to.equal(sortedOrderPriceList.length);
+
+      for (let i = 0; i < tradeExecutedEvents.length; i++) {
+        const event = tradeExecutedEvents[i];
+        const price = event.args.price;
+        expect(price).to.equal(sortedOrderPriceList[i].price);
+      }
+    })
+
+
+    // マッチング順のチェック　売り ->　買い　指値
+    it("should match orders correctly with matching order", async function () {
+      // 売り注文を出す,あえて価格を順番通りにしていない
+      const orderPriceList = [{
+        price: 230,
+        amount: 100,
+      }, {
+        price: 300,
+        amount: 100,
+      }, {
+        price: 30,
+        amount: 100,
+      },
+      {
+        price: 40,
+        amount: 100,
+      },
+      {
+        price: 100,
+        amount: 100,
+      }]
+
+      for (const order of orderPriceList) {
+        const sellOrder = await createTradeRequest({
+          user: user,
+          base: baseTokenA,
+          quote: quoteTokenA,
+          side: 1, // Sell
+          amount: order.amount,
+          price: order.price,
+        });
+        await vault.connect(user).executeTradeBatch([sellOrder]);
+      }
+
+      // 買い注文を出す
+      const buyOrder = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: 100000,
+        price: 1000, // Market order
+      });
+      await vault.connect(trader).executeTradeBatch([buyOrder]);
+
+      // マッチング順のチェック
+      const tradeExecutedEvents = await getContractEvents(
+        matchingEngine,
+        matchingEngine.filters.TradeExecuted
+      );
+      // マッチングは価格の低い順に行われるはず
+      // orderPriceListの価格の低いものから並べる
+      const sortedOrderPriceList = orderPriceList.sort((a, b) => a.price - b.price);
+
+      for (let i = 0; i < tradeExecutedEvents.length; i++) {
+        const event = tradeExecutedEvents[i];
+        const price = event.args.price;
+        expect(price).to.equal(sortedOrderPriceList[i].price);
+      }
+    })
+
   });
 
   describe("Bulk Matching", function () {
