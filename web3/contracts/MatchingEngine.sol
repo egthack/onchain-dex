@@ -138,7 +138,29 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid pair"
         );
         OrderBook storage ob = orderBooks[pairId];
-        return ob.sellTree.getMin();
+        uint256 bestPrice = ob.sellTree.getMin();
+
+        // 価格が0でない場合、その価格レベルにアクティブな注文が存在するか確認
+        if (bestPrice != 0) {
+            uint256[] storage ordersAtPrice = ob.sellOrdersAtPrice[bestPrice];
+            bool hasActiveOrders = false;
+
+            for (uint256 i = 0; i < ordersAtPrice.length; i++) {
+                if (orders[ordersAtPrice[i]].active) {
+                    hasActiveOrders = true;
+                    break;
+                }
+            }
+
+            // アクティブな注文が存在しない場合、価格ツリーから価格を削除して0を返す
+            if (!hasActiveOrders) {
+                // 注意: view関数内でツリーを変更することはできないため、
+                // 実際の削除は行わず、0を返すだけにします
+                return 0;
+            }
+        }
+
+        return bestPrice;
     }
 
     function getBestBuyPrice(bytes32 pairId) external view returns (uint256) {
@@ -147,7 +169,29 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             "Invalid pair"
         );
         OrderBook storage ob = orderBooks[pairId];
-        return ob.buyTree.getMax();
+        uint256 bestPrice = ob.buyTree.getMax();
+
+        // 価格が0でない場合、その価格レベルにアクティブな注文が存在するか確認
+        if (bestPrice != 0) {
+            uint256[] storage ordersAtPrice = ob.buyOrdersAtPrice[bestPrice];
+            bool hasActiveOrders = false;
+
+            for (uint256 i = 0; i < ordersAtPrice.length; i++) {
+                if (orders[ordersAtPrice[i]].active) {
+                    hasActiveOrders = true;
+                    break;
+                }
+            }
+
+            // アクティブな注文が存在しない場合、価格ツリーから価格を削除して0を返す
+            if (!hasActiveOrders) {
+                // 注意: view関数内でツリーを変更することはできないため、
+                // 実際の削除は行わず、0を返すだけにします
+                return 0;
+            }
+        }
+
+        return bestPrice;
     }
 
     // ---------------- Pair Management ----------------
@@ -241,12 +285,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
         OrderBook storage ob = orderBooks[pairId];
         if (side == OrderSide.Buy) {
             ob.buyOrdersAtPrice[orderPrice].push(orderId);
-            if (!ob.buyTree.exists(orderPrice)) {
+            if (!ob.buyTree.exists(orderPrice) && orderPrice != 0) {
                 ob.buyTree.insert(orderPrice);
             }
         } else {
             ob.sellOrdersAtPrice[orderPrice].push(orderId);
-            if (!ob.sellTree.exists(orderPrice)) {
+            if (!ob.sellTree.exists(orderPrice) && orderPrice != 0) {
                 ob.sellTree.insert(orderPrice);
             }
         }
@@ -320,7 +364,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 );
             }
 
-            if (sellList.length == 0) {
+            if (sellList.length == 0 || bestSellPrice == 0) {
                 ob.sellTree.remove(bestSellPrice);
             }
             bestSellPrice = ob.sellTree.getMin();
@@ -464,7 +508,7 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 );
             }
 
-            if (buyList.length == 0) {
+            if (buyList.length == 0 || bestBuyPrice == 0) {
                 ob.buyTree.remove(bestBuyPrice);
             }
             bestBuyPrice = ob.buyTree.getMax();
@@ -636,13 +680,46 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
 
         bytes32 pairId = _generatePairId(order.base, order.quote);
         OrderBook storage ob = orderBooks[pairId];
+
+        // 注文を非アクティブに設定
+        order.active = false;
+
+        // 価格レベルの配列から注文IDを削除
+        uint256[] storage ordersAtPrice;
         if (order.side == OrderSide.Buy) {
-            ob.buyTree.remove(order.price);
+            ordersAtPrice = ob.buyOrdersAtPrice[order.price];
         } else {
-            ob.sellTree.remove(order.price);
+            ordersAtPrice = ob.sellOrdersAtPrice[order.price];
         }
 
-        order.active = false;
+        // 配列から注文IDを削除
+        for (uint256 i = 0; i < ordersAtPrice.length; i++) {
+            if (ordersAtPrice[i] == orderId) {
+                // 最後の要素と交換して削除
+                ordersAtPrice[i] = ordersAtPrice[ordersAtPrice.length - 1];
+                ordersAtPrice.pop();
+                break;
+            }
+        }
+
+        // 価格レベルに他のアクティブな注文が存在するか確認
+        bool hasActiveOrders = false;
+        for (uint256 i = 0; i < ordersAtPrice.length; i++) {
+            if (orders[ordersAtPrice[i]].active) {
+                hasActiveOrders = true;
+                break;
+            }
+        }
+
+        // アクティブな注文が存在しない場合、価格ツリーから価格を削除
+        if (!hasActiveOrders) {
+            if (order.side == OrderSide.Buy) {
+                ob.buyTree.remove(order.price);
+            } else {
+                ob.sellTree.remove(order.price);
+            }
+        }
+
         return true;
     }
 
