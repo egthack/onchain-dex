@@ -479,8 +479,8 @@ export default function TradingPage() {
 
       console.log("handlePlaceOrder内でwalletClient.writeContractに渡される値")
       console.log("tradeRequest", tradeRequest);
-      console.log(tradeRequest.amount);
-      console.log(tradeRequest.price);
+      console.log("tradeRequest.amount",tradeRequest.amount);
+      console.log("tradeRequest.price",tradeRequest.price);
 
       // TradingVault経由で注文を実行
       const hash = await walletClient.writeContract({
