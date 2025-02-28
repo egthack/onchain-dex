@@ -223,7 +223,8 @@ export default function TradingPage() {
                     status: "OPEN", 
                     side: 0, 
                     baseToken_: { symbol: "${selectedPair.base}" }, 
-                    quoteToken_: { symbol: "${selectedPair.quote}" }
+                    quoteToken_: { symbol: "${selectedPair.quote}" },
+                    price_gt: 0
                   }
                   orderBy: price
                   orderDirection: desc
@@ -272,7 +273,8 @@ export default function TradingPage() {
                     status: "OPEN", 
                     side: 1, 
                     baseToken_: { symbol: "${selectedPair.base}" }, 
-                    quoteToken_: { symbol: "${selectedPair.quote}" }
+                    quoteToken_: { symbol: "${selectedPair.quote}" },
+                    price_gt: 0
                   }
                   orderBy: price
                   orderDirection: asc
