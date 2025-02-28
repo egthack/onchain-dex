@@ -1847,6 +1847,7 @@ describe("MatchingEngine", function () {
   });
 
   describe("Market Order Handling", function () {
+    // 成行注文で最低のbuy order以下であるとマッチングしないテスト
     it("should properly handle market buy order with partial fill", async function () {
       // 売り注文を作成（少量）
       const sellPrice = 10000;
@@ -1861,8 +1862,8 @@ describe("MatchingEngine", function () {
       });
       await vault.connect(trader).executeTradeBatch([sellTradeRequest]);
 
-      // 買いの成行注文を作成（同じ量）
-      const buyAmount = 50; // 売り注文と同じ量
+      // 買いの成行注文を作成
+      const buyAmount = 500; // 売り注文よりかなり小さい量
       const buyTradeRequest = await createTradeRequest({
         user: user,
         base: baseTokenA,
@@ -1883,20 +1884,67 @@ describe("MatchingEngine", function () {
       const sellOrder = await matchingEngine.getOrder(sellOrderId);
       const buyOrder = await matchingEngine.getOrder(buyOrderId);
 
-      console.log("Sell order active status:", sellOrder.active);
-      console.log("Sell order remaining amount:", sellOrder.amount.toString());
-      console.log("Buy order active status:", buyOrder.active);
-      console.log("Buy order remaining amount:", buyOrder.amount.toString());
+      // 売り注文そのまま
+      expect(sellOrder.active).to.equal(true);
+      expect(sellOrder.amount).to.equal(sellAmount);
 
-      // 売り注文は完全にマッチングされているはず
-      expect(sellOrder.active).to.equal(false);
-      expect(sellOrder.amount).to.equal(0);
+      // 買い注文はinactiveになる
+      expect(buyOrder.active).to.equal(false);
+      expect(buyOrder.amount).to.equal(buyAmount);
+    });
 
-      // 買い注文も完全にマッチングされているはず
+    // 成行注文で最低のbuy order以上なのでマッチングされるテスト
+    it("should properly handle market buy order with partial fill", async function () {
+      // 売り注文を作成
+      // 全部マッチングしないようにbuy orderより多くしておく
+      //  0.000001 * 500 = 0.0005
+      const sellPrice = 10000;
+      const sellAmount = 500;
+      const sellTradeRequest = await createTradeRequest({
+        user: trader,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 1, // Sell
+        amount: sellAmount,
+        price: sellPrice,
+      });
+      await vault.connect(trader).executeTradeBatch([sellTradeRequest]);
+
+      // 買いの成行注文を作成
+      //  0.000001 * 500000 = 0.5
+      const buyAmount = 500000; // sellPriceより高いのでマッチングされる
+      const buyTradeRequest = await createTradeRequest({
+        user: user,
+        base: baseTokenA,
+        quote: quoteTokenA,
+        side: 0, // Buy
+        amount: buyAmount,
+        price: 0, // 成行注文
+      });
+
+      // 買い注文を実行
+      await vault.connect(user).executeTradeBatch([buyTradeRequest]);
+
+      // 注文IDを取得
+      const sellOrderId = 0;
+      const buyOrderId = 1;
+
+      // 注文の状態を確認
+      const sellOrder = await matchingEngine.getOrder(sellOrderId);
+      const buyOrder = await matchingEngine.getOrder(buyOrderId);
+
+      // 売り注文はマッチングされているが、部分約定なのでactiveになる
+      expect(sellOrder.active).to.equal(true);
+      expect(sellOrder.amount).to.equal(
+        (sellAmount * sellPrice - buyAmount) / 10000
+      );
+
+      // 買い注文はi成り行きなのでinactive、amountは当然0
       expect(buyOrder.active).to.equal(false);
       expect(buyOrder.amount).to.equal(0);
     });
 
+    // 売りの成行注文でマッチングがうまくいかないことはない、板があればマッチングされる
     it("should properly handle market sell order with partial fill", async function () {
       // 買い注文を作成（少量）
       const buyPrice = 10000;
@@ -1930,11 +1978,6 @@ describe("MatchingEngine", function () {
       // 注文の状態を確認
       const buyOrder = await matchingEngine.getOrder(buyOrderId);
       const sellOrder = await matchingEngine.getOrder(sellOrderId);
-
-      console.log("Buy order active status:", buyOrder.active);
-      console.log("Buy order remaining amount:", buyOrder.amount.toString());
-      console.log("Sell order active status:", sellOrder.active);
-      console.log("Sell order remaining amount:", sellOrder.amount.toString());
 
       // 買い注文は完全にマッチングされているはず
       expect(buyOrder.active).to.equal(false);

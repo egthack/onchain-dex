@@ -353,6 +353,12 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
             // console.log('bestSellPrice', bestSellPrice);
             // console.log('incoming.price', incoming.price);
             uint256[] storage sellList = ob.sellOrdersAtPrice[bestSellPrice];
+            uint256 maxBaseFill = remaining / bestSellPrice;
+            if (maxBaseFill == 0) {
+                // マッチすることはないので終了させる
+                _finalizeOrder(incoming, remaining, originalAmount);
+                return;
+            }
 
             for (uint256 i = 0; i < sellList.length && remaining > 0; ) {
                 (remaining, i) = _processBuyMatch(
@@ -512,7 +518,6 @@ contract MatchingEngine is IMatchingEngine, Ownable, ReentrancyGuard {
                 ob.buyTree.remove(bestBuyPrice);
             }
             bestBuyPrice = ob.buyTree.getMax();
-            // console.log("new bestBuyPrice", bestBuyPrice);
         }
 
         _finalizeOrder(incoming, remaining, originalAmount);
