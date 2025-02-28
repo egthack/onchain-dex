@@ -1,0 +1,19 @@
+{
+  "network": "riseSepolia",
+  "blockNumber": 5645299,
+  "deployer": "0xADEfC64dB771908b4915EC294a66892545045EAc",
+  "contracts": {
+    "tokens": {
+      "WBTC": "0x64011088563F8e98fd25F403f7A0Bb94820F5265",
+      "WETH": "0x793910b74a9A9Bf3B929fe11FdE2Ed934aB37EF5",
+      "POL": "0x70D58973809a4EBBebCCe047b2dE06F4C37F61b6",
+      "TRUMP": "0xCe7B50D5F2C9d2c4c76074B888e7Ddc93A52B1d1",
+      "USDC": "0xfa2777F5E1d4e213974e209E2Da6638Ece5E6132"
+    },
+    "trading": {
+      "matchingEngine": "0x7aA89735CbB41696aA49fE1C0C31E00fe489C3F9",
+      "tradingVault": "0xad5898d38d5147e23D995d4ec170d28686a64074"
+    },
+    "faucet": "0x8a02194aC7Adb6d14538a00cebec83B64FD6C06B"
+  }
+}

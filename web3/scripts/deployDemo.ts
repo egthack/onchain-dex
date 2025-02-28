@@ -93,7 +93,7 @@ const main = async () => {
     await txFaucetApprove.wait();
     console.log(`approved ${token.amount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
 
-    const txFaucetSend = await baseToken.transfer(await faucetContract.getAddress(), token.amount);
+    const txFaucetSend = await baseToken.transfer(await faucetContract.getAddress(), ethers.parseUnits(token.amount.toString(), token.decimals));
     await txFaucetSend.wait();
     console.log(`sent ${token.amount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
 
