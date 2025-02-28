@@ -638,6 +638,9 @@ export default function TradingPage() {
       } else {
         setError("");
         setTxHash(hash);
+        // Update deposit balances
+        fetchDepositBalance();
+        fetchDepositBalanceQuote();
         setModalOpen(true);
         console.log("Order cancellation successful");
         fetchMyOrders();
