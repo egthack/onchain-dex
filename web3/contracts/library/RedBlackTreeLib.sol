@@ -402,6 +402,9 @@ library RedBlackTreeLib {
         if (!yOriginalRed) {
             _deleteFixup(tree, x, xp);
         }
+
+        // ノードを削除した後、そのノードのflagsを0に設定
+        tree.nodes[key].flags = 0;
     }
 
     /**
