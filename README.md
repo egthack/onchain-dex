@@ -112,7 +112,6 @@ npx hardhat compile
 
 # 4. Deploy to RISE testnet
 npx hardhat run scripts/deployDemo.ts --network riseSepolia
-npx hardhat run scripts/deployFaucet.ts --network riseSepolia
 ```
 
 The deployment script will output the addresses of the core contracts that you'll need for the next steps.
