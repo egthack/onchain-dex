@@ -1,14 +1,17 @@
 # RiseX – Full On-Chain CLOB DEX on the RISE Blockchain
 
+<img width="1920" alt="image" src="https://github.com/user-attachments/assets/e0653fcf-1b63-47a1-abf2-49e1d7b0d56a" />
+
 > **TL;DR:** RiseX is a high-performance, fully on-chain Central Limit Order Book DEX that delivers CEX-like speed with complete DeFi transparency by leveraging RISE's modular blockchain architecture and Celestia's data availability layer.
 
-**[Live Demo Available Here](https://main.d20nbutm7dylce.amplifyapp.com/)**
+**[Live Demo Available Here](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
 
 ## 1. Problem & Solution
 
 ### The Problem We're Solving
 
 Traditional DEXs face a critical dilemma:
+
 - ❌ **AMMs** sacrifice price efficiency and market depth
 - ❌ **Off-chain order books** compromise transparency and trustlessness
 - ❌ **On-chain order books** (until now) have been too slow and expensive for a viable trading experience
@@ -32,16 +35,19 @@ The result is a DEX that offers the **speed and user experience of a centralized
 RiseX's breakthrough performance is made possible by RISE's **modular blockchain architecture**, which separates key blockchain functions for optimal performance:
 
 ### 🔹 Execution Layer (RISE)
+
 - **Parallel EVM Execution:** Processes transactions in parallel via a Parallel EVM (pEVM) engine
 - **Continuous Block Production:** Ensures sub-second block finality for near-instant trades
 - **Optimized for Trading:** Smart contract execution environment specifically tuned for high-volume transaction processing
 
 ### 🔹 Data Availability Layer (Celestia)
+
 - **Modular Data Storage:** Transaction data is published to Celestia rather than stored on the execution layer
 - **Scalable Verification:** Anyone can verify the complete order book and trade history
 - **Decentralized Security:** Ensures that all order data is immutably available for verification
 
 ### 🔹 Consensus Layer (Based Sequencing)
+
 - **Ethereum Alignment:** Leverages Ethereum L1's validators for transaction ordering
 - **Decentralized Sequencing:** No single sequencer – anyone can permissionlessly propose blocks
 - **Censorship Resistance:** Inherits Ethereum's security for fair and unbiased order execution
@@ -53,16 +59,19 @@ RiseX's breakthrough performance is made possible by RISE's **modular blockchain
 RiseX is a feature-rich spot trading DEX with a robust on-chain order book and exchange logic:
 
 ### Trading Engine
+
 - ⚡ **Fully On-Chain Order Book** – Implemented using efficient Red-Black Tree data structures (O(log n) operations)
 - 💱 **Spot Trading Focus** – Clean, efficient trading of token pairs (e.g., WETH/USDC, WBTC/USDC)
 - 🔄 **Instant Settlement** – All trades are settled immediately on-chain
 
 ### Order Types
+
 - 📊 **Limit Orders** – Set your price, rest in the order book until filled
 - 🚀 **Market Orders** – Execute immediately at best available price
 - 🔍 **Partial Fills** – Orders can be partially executed with remainder staying on the book
 
 ### Exchange Features
+
 - 🏦 **Vault-Based Fund Management** – Non-custodial yet seamless trading experience
 - 💰 **Maker-Taker Fee Model** – Incentivizes liquidity provision with lower fees for makers
 - 📱 **Real-Time UI Updates** – Order book and trades update in real-time via Goldsky subgraph indexing
@@ -71,7 +80,7 @@ RiseX is a feature-rich spot trading DEX with a robust on-chain order book and e
 
 Want to try RiseX immediately? Follow these simple steps:
 
-1. Visit our **[Live Demo](https://main.d20nbutm7dylce.amplifyapp.com/)**
+1. Visit our **[Live Demo](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
 2. Connect your MetaMask wallet to RISE Sepolia testnet
 3. Use the built-in Faucet to get test tokens
 4. Deposit a test token in the Vault
@@ -167,6 +176,7 @@ RiseX's modular architecture can be understood as layers working together:
 ```
 
 **Order flow:**
+
 1. User places an order → stored on-chain in order book (sorted Red-Black Tree)
 2. Matching engine checks compatibility with existing orders
 3. If match found → order executed, balances updated in vault
@@ -187,9 +197,10 @@ By building RiseX on RISE and Celestia, we've created a solution that finally re
 
 ## 8. Try Our Demo 🎉
 
-**[Live Demo URL](https://main.d20nbutm7dylce.amplifyapp.com/)**
+**[Live Demo URL](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
 
 Experience the full trading flow on RISE testnet:
+
 - Connect your wallet (MetaMask configured to RISE)
 - Mint test tokens from our faucet
 - Place and cancel orders
@@ -197,4 +208,4 @@ Experience the full trading flow on RISE testnet:
 
 ---
 
-*We believe RiseX demonstrates a compelling use-case of RISE's modular blockchain tech by delivering a true on-chain order book exchange. By solving the performance hurdles and preserving transparency, it highlights how modular L2s and DA layers like Celestia can unlock new DeFi innovations. We invite you to explore the code, test the demo, and imagine the future of high-performance DeFi built on modular stacks!* 🚀
+_We believe RiseX demonstrates a compelling use-case of RISE's modular blockchain tech by delivering a true on-chain order book exchange. By solving the performance hurdles and preserving transparency, it highlights how modular L2s and DA layers like Celestia can unlock new DeFi innovations. We invite you to explore the code, test the demo, and imagine the future of high-performance DeFi built on modular stacks!_ 🚀
