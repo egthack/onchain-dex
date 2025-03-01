@@ -10,25 +10,25 @@ const SUPPORTED_TOKENS = [
     symbol: "USDC",
     name: "USD Coin",
     decimals: 6,
-    amount: "1000000000000",
+    amount: "1000000",
   },
   {
     symbol: "WETH",
     name: "Wrapped ETH",
     decimals: 18,
-    amount: "1000000000000",
+    amount: "1000000",
   },
   {
     symbol: "WBTC",
     name: "Wrapped BTC",
     decimals: 8,
-    amount: "1000000000000",
+    amount: "1000000",
   },
   {
     symbol: "POL",
     name: "Polaris Token",
     decimals: 18,
-    amount: "1000000000000",
+    amount: "1000000",
   }
 ];
 
