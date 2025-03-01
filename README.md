@@ -6,6 +6,8 @@
 
 **[Live Demo Available Here](https://main.d20nbutm7dylce.amplifyapp.com/)**
 
+**[Demo Video Here](https://youtu.be/FhLZijmkNlY?si=t61q4ZmIQusTq9J7)**
+
 ## 1. Problem & Solution
 
 ### The Problem We're Solving
