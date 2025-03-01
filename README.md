@@ -4,7 +4,7 @@
 
 > **TL;DR:** RiseX is a high-performance, fully on-chain Central Limit Order Book DEX that delivers CEX-like speed with complete DeFi transparency by leveraging RISE's modular blockchain architecture and Celestia's data availability layer.
 
-**[Live Demo Available Here](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
+**[Live Demo Available Here](https://main.d20nbutm7dylce.amplifyapp.com/)**
 
 ## 1. Problem & Solution
 
@@ -80,7 +80,7 @@ RiseX is a feature-rich spot trading DEX with a robust on-chain order book and e
 
 Want to try RiseX immediately? Follow these simple steps:
 
-1. Visit our **[Live Demo](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
+1. Visit our **[Live Demo](https://main.d20nbutm7dylce.amplifyapp.com/)**
 2. Connect your MetaMask wallet to RISE Sepolia testnet
 3. Use the built-in Faucet to get test tokens
 4. Deposit a test token in the Vault
@@ -196,7 +196,7 @@ By building RiseX on RISE and Celestia, we've created a solution that finally re
 
 ## 8. Try Our Demo 🎉
 
-**[Live Demo URL](https://feature-mammothon-submit.d20nbutm7dylce.amplifyapp.com/)**
+**[Live Demo URL](https://main.d20nbutm7dylce.amplifyapp.com/)**
 
 Experience the full trading flow on RISE testnet:
 
