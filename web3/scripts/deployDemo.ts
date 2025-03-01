@@ -32,36 +32,38 @@ const main = async () => {
   const faucetContract = await MultiTokenFaucet.deploy(faucetAmount, cooldown);
   await faucetContract.waitForDeployment();
   deployedAddresses.contracts.faucet = await faucetContract.getAddress();
-  console.log("MultiTokenFaucet deployed to:", await faucetContract.getAddress());
-
+  console.log(
+    "MultiTokenFaucet deployed to:",
+    await faucetContract.getAddress()
+  );
 
   // WBTC, WETH, POL, TRUMP, USDC(quote)
   const tokens = {
     WBTC: {
       name: "WBTC",
       symbol: "WBTC",
-      amount: BigInt(21000000),
+      amount: BigInt(2100000000),
       decimals: 8,
       address: "",
     },
     WETH: {
       name: "WETH",
       symbol: "WETH",
-      amount: BigInt(10000000),
+      amount: BigInt(1000000000),
       decimals: 18,
       address: "",
     },
     POL: {
       name: "POL",
       symbol: "POL",
-      amount: BigInt(1000000000),
+      amount: BigInt(100000000000),
       decimals: 18,
       address: "",
     },
     TRUMP: {
       name: "TRUMP",
       symbol: "TRUMP",
-      amount: BigInt(1000000000000),
+      amount: BigInt(100000000000000),
       decimals: 18,
       address: "",
     },
@@ -84,18 +86,38 @@ const main = async () => {
     );
     await baseToken.waitForDeployment();
     console.log(`${token.symbol} deployed to:`, await baseToken.getAddress());
-    const tokenHalfAmount = ethers.parseUnits(token.amount.toString(), token.decimals) / BigInt(2);
-    const txFaucet = await faucetContract.setMaxTokenAmount(baseToken.getAddress(), tokenHalfAmount);
+    const tokenHalfAmount =
+      ethers.parseUnits(token.amount.toString(), token.decimals) / BigInt(2);
+    const txFaucet = await faucetContract.setMaxTokenAmount(
+      baseToken.getAddress(),
+      tokenHalfAmount
+    );
     await txFaucet.wait();
-    console.log(`Set faucet maxTokenAmount for ${token.symbol} to ${tokenHalfAmount} tokens`);
+    console.log(
+      `Set faucet maxTokenAmount for ${token.symbol} to ${tokenHalfAmount} tokens`
+    );
 
-    const txFaucetApprove = await baseToken.approve(await faucetContract.getAddress(), tokenHalfAmount);
+    const txFaucetApprove = await baseToken.approve(
+      await faucetContract.getAddress(),
+      tokenHalfAmount
+    );
     await txFaucetApprove.wait();
-    console.log(`approved ${tokenHalfAmount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
+    console.log(
+      `approved ${tokenHalfAmount} ${
+        token.symbol
+      } to faucet ${await faucetContract.getAddress()}`
+    );
 
-    const txFaucetSend = await baseToken.transfer(await faucetContract.getAddress(), tokenHalfAmount);
+    const txFaucetSend = await baseToken.transfer(
+      await faucetContract.getAddress(),
+      tokenHalfAmount
+    );
     await txFaucetSend.wait();
-    console.log(`sent ${tokenHalfAmount} ${token.symbol} to faucet ${await faucetContract.getAddress()}`);
+    console.log(
+      `sent ${tokenHalfAmount} ${
+        token.symbol
+      } to faucet ${await faucetContract.getAddress()}`
+    );
 
     deployedAddresses.contracts.tokens[token.symbol] =
       await baseToken.getAddress();
@@ -166,14 +188,15 @@ const main = async () => {
   // 追加：frontend/env.json に最新の契約アドレス情報を書き込み
   const envData = {
     NEXT_PUBLIC_ENABLE_TESTNETS: "true",
-    NEXT_PUBLIC_MATCHING_ENGINE_ADDRESS: deployedAddresses.contracts.trading.matchingEngine,
+    NEXT_PUBLIC_MATCHING_ENGINE_ADDRESS:
+      deployedAddresses.contracts.trading.matchingEngine,
     NEXT_PUBLIC_VAULT_ADDRESS: deployedAddresses.contracts.trading.tradingVault,
     NEXT_PUBLIC_FAUCET_ADDRESS: deployedAddresses.contracts.faucet,
     NEXT_PUBLIC_WBTC_ADDRESS: deployedAddresses.contracts.tokens.WBTC,
     NEXT_PUBLIC_WETH_ADDRESS: deployedAddresses.contracts.tokens.WETH,
     NEXT_PUBLIC_POL_ADDRESS: deployedAddresses.contracts.tokens.POL,
     NEXT_PUBLIC_TRUMP_ADDRESS: deployedAddresses.contracts.tokens.TRUMP,
-    NEXT_PUBLIC_USDC_ADDRESS: deployedAddresses.contracts.tokens.USDC
+    NEXT_PUBLIC_USDC_ADDRESS: deployedAddresses.contracts.tokens.USDC,
   };
 
   const frontendEnvPath = path.join(__dirname, "../../frontend/env.json");
@@ -183,14 +206,15 @@ const main = async () => {
   }
   const updatedEnv = {
     ...existingEnv,
-    NEXT_PUBLIC_MATCHING_ENGINE_ADDRESS: deployedAddresses.contracts.trading.matchingEngine,
+    NEXT_PUBLIC_MATCHING_ENGINE_ADDRESS:
+      deployedAddresses.contracts.trading.matchingEngine,
     NEXT_PUBLIC_VAULT_ADDRESS: deployedAddresses.contracts.trading.tradingVault,
     NEXT_PUBLIC_FAUCET_ADDRESS: deployedAddresses.contracts.faucet,
     NEXT_PUBLIC_WBTC_ADDRESS: deployedAddresses.contracts.tokens.WBTC,
     NEXT_PUBLIC_WETH_ADDRESS: deployedAddresses.contracts.tokens.WETH,
     NEXT_PUBLIC_POL_ADDRESS: deployedAddresses.contracts.tokens.POL,
     NEXT_PUBLIC_TRUMP_ADDRESS: deployedAddresses.contracts.tokens.TRUMP,
-    NEXT_PUBLIC_USDC_ADDRESS: deployedAddresses.contracts.tokens.USDC
+    NEXT_PUBLIC_USDC_ADDRESS: deployedAddresses.contracts.tokens.USDC,
   };
   fs.writeFileSync(frontendEnvPath, JSON.stringify(updatedEnv, null, 2));
   console.log(`Frontend environment file saved to: ${frontendEnvPath}`);
