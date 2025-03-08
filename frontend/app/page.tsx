@@ -73,10 +73,8 @@ export default function TradingPage() {
   const publicClient = usePublicClient();
 
   const [selectedPair, setSelectedPair] = useState(TRADING_PAIRS[0]);
-  const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [side, setSide] = useState<"buy" | "sell">("buy");
 
-  const [marketAmount, setMarketAmount] = useState("");
   const [limitPrice, setLimitPrice] = useState("");
   const [limitAmount, setLimitAmount] = useState("");
   const [txHash, setTxHash] = useState("");
@@ -89,7 +87,6 @@ export default function TradingPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
 
-  const [marketAmountError, setMarketAmountError] = useState("");
   const [limitPriceError, setLimitPriceError] = useState("");
   const [limitAmountError, setLimitAmountError] = useState("");
 
@@ -173,37 +170,21 @@ export default function TradingPage() {
   // useEffect to check balance warning
   useEffect(() => {
     let warning = "";
-    if (orderType === "market") {
-      if (side === "buy" && marketAmount && latestPrice) {
-        const estimatedTotal = Number.parseFloat(marketAmount) * Number.parseFloat(latestPrice);
-        const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
-        if (estimatedTotal > availableUSDC) {
-          warning = "Order total exceeds available USDC balance";
-        }
-      } else if (side === "sell" && marketAmount) {
-        const amountValue = Number.parseFloat(marketAmount);
-        const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
-        if (amountValue > availableToken) {
-          warning = "Order amount exceeds available token balance";
-        }
+    if (side === "buy" && limitAmount && limitPrice) {
+      const estimatedTotal = Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice);
+      const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
+      if (estimatedTotal > availableUSDC) {
+        warning = "Order total exceeds available USDC balance";
       }
-    } else { // limit orders
-      if (side === "buy" && limitAmount && limitPrice) {
-        const estimatedTotal = Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice);
-        const availableUSDC = Number.parseFloat(formatTokenUnits(depositBalanceQuote, getTokenDecimals("USDC")));
-        if (estimatedTotal > availableUSDC) {
-          warning = "Order total exceeds available USDC balance";
-        }
-      } else if (side === "sell" && limitAmount) {
-        const amountValue = Number.parseFloat(limitAmount);
-        const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
-        if (amountValue > availableToken) {
-          warning = "Order amount exceeds available token balance";
-        }
+    } else if (side === "sell" && limitAmount) {
+      const amountValue = Number.parseFloat(limitAmount);
+      const availableToken = Number.parseFloat(formatTokenUnits(depositBalance, getTokenDecimals(selectedPair.base)));
+      if (amountValue > availableToken) {
+        warning = "Order amount exceeds available token balance";
       }
     }
     setBalanceWarning(warning);
-  }, [orderType, side, marketAmount, latestPrice, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
+  }, [side, limitAmount, limitPrice, depositBalance, depositBalanceQuote, selectedPair, getTokenDecimals, formatTokenUnits]);
 
   // Updated Buy Orders fetching hook
   useEffect(() => {
@@ -403,41 +384,23 @@ export default function TradingPage() {
       const baseAddress = TOKEN_ADDRESSES[selectedPair.base as keyof typeof TOKEN_ADDRESSES] as unknown as `0x${string}`;
       const quoteAddress = TOKEN_ADDRESSES[selectedPair.quote as keyof typeof TOKEN_ADDRESSES] as unknown as `0x${string}`;
 
-      let amountBN: bigint;
-      let priceBN: bigint;
-      // const baseDecimals = getTokenDecimals(selectedPair.base);
-      // const quoteDecimals = getTokenDecimals(selectedPair.quote);
-
-      // console.log("baseDecimals", baseDecimals);
-      // console.log("quoteDecimals", quoteDecimals);
-
       console.log("フォームに入力されてhandlePlaceOrderに渡される値")
-      console.log("marketAmount", marketAmount);
       console.log("limitAmount", limitAmount);
       console.log("limitPrice", limitPrice);
       
-      if (orderType === "market") {
-        if (!marketAmount || marketAmount === "0") {
-          setError("Please enter the amount");
-          setIsLoading(false);
-          return;
-        }
-        amountBN = BigInt(Math.floor(Number.parseFloat(marketAmount) * 1000000));
-        priceBN = BigInt(0);
-      } else {
-        if (!limitAmount || limitAmount === "0") {
-          setError("Please enter the amount");
-          setIsLoading(false);
-          return;
-        }
-        if (!limitPrice || limitPrice === "0") {
-          setError("Please enter the price");
-          setIsLoading(false);
-          return;
-        }
-        amountBN = BigInt(Math.floor(Number.parseFloat(limitAmount) * 1000000));
-        priceBN = BigInt(Math.floor(Number.parseFloat(limitPrice) * 100));
+      if (!limitAmount || limitAmount === "0") {
+        setError("Please enter the amount");
+        setIsLoading(false);
+        return;
       }
+      if (!limitPrice || limitPrice === "0") {
+        setError("Please enter the price");
+        setIsLoading(false);
+        return;
+      }
+
+      const amountBN = BigInt(Math.floor(Number.parseFloat(limitAmount) * 1000000));
+      const priceBN = BigInt(Math.floor(Number.parseFloat(limitPrice) * 100));
 
       // 署名処理の修正部分
       const messageHash = ethers.keccak256(
@@ -680,11 +643,7 @@ export default function TradingPage() {
 
   // New: Function to handle order book row click
   const handlePriceClick = (price: string) => {
-    if (orderType === 'market') {
-      // No need to update marketPrice for market orders
-    } else {
-      setLimitPrice(price);
-    }
+    setLimitPrice(price);
   };
 
   return (
@@ -918,119 +877,82 @@ export default function TradingPage() {
           </div>
           {/* Order Type Selector */}
           <div className="flex gap-2 mb-3">
+            <div className="relative flex-1 group">
+              <button
+                type="button"
+                disabled
+                className="w-full py-1.5 font-medium rounded text-xs transition-colors bg-trading-light text-gray-400 opacity-50 cursor-not-allowed"
+              >
+                Market
+              </button>
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="bg-black bg-opacity-80 text-yellow-400 text-xs px-2 py-1 rounded">Coming Soon</span>
+              </div>
+            </div>
             <button
               type="button"
-              onClick={() => setOrderType("market")}
-              className={`flex-1 py-1.5 font-medium rounded text-xs transition-colors ${
-                orderType === "market" ? "bg-accent-green text-black" : "bg-trading-light text-white"
-              }`}
-            >
-              Market
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType("limit")}
-              className={`flex-1 py-1.5 font-medium rounded text-xs transition-colors ${
-                orderType === "limit" ? "bg-accent-green text-black" : "bg-trading-light text-white"
-              }`}
+              className="flex-1 py-1.5 font-medium rounded text-xs transition-colors bg-accent-green text-black"
             >
               Limit
             </button>
           </div>
           <div className="space-y-3">
-            {orderType === "market" ? (
-              <div className="space-y-3">
-                {/* Market Order inputs (replica of the ones removed from left column) */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="market-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                      Amount ({selectedPair.base})
-                    </label>
-                    <input
-                      id="market-amount-input"
-                      type="number"
-                      step="0.000001"
-                      className="trading-input"
-                      placeholder="0.00"
-                      value={marketAmount}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setMarketAmount(value);
-                        if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
-                          setMarketAmountError("Amount can have up to 6 decimal places only");
-                        } else {
-                          setMarketAmountError("");
-                        }
-                      }}
-                    />
-                    {marketAmountError && <p className="text-xs text-red-500">{marketAmountError}</p>}
-                  </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="limit-price-input" className="block text-xs font-medium text-gray-400 mb-1">
+                    Price ({selectedPair.quote})
+                  </label>
+                  <input
+                    id="limit-price-input"
+                    type="number"
+                    step="0.01"
+                    className="trading-input"
+                    placeholder="0.00"
+                    value={limitPrice}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setLimitPrice(value);
+                      if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
+                        setLimitPriceError("Price can have up to 2 decimal places only");
+                      } else {
+                        setLimitPriceError("");
+                      }
+                    }}
+                  />
+                  {limitPriceError && <p className="text-xs text-red-500">{limitPriceError}</p>}
                 </div>
-                <div className="text-xs text-gray-400">
-                  Estimated Total: <span className="text-white">
-                    {marketAmount && latestPrice ? (Number.parseFloat(marketAmount) * Number.parseFloat(latestPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
-                  </span>
+                <div>
+                  <label htmlFor="limit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
+                    Amount ({selectedPair.base})
+                  </label>
+                  <input
+                    id="limit-amount-input"
+                    type="number"
+                    step="0.000001"
+                    className="trading-input"
+                    placeholder="0.00"
+                    value={limitAmount}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setLimitAmount(value);
+                      if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
+                        setLimitAmountError("Amount can have up to 6 decimal places only");
+                      } else {
+                        setLimitAmountError("");
+                      }
+                    }}
+                  />
+                  {limitAmountError && <p className="text-xs text-red-500">{limitAmountError}</p>}
                 </div>
-                {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="limit-price-input" className="block text-xs font-medium text-gray-400 mb-1">
-                      Price ({selectedPair.quote})
-                    </label>
-                    <input
-                      id="limit-price-input"
-                      type="number"
-                      step="0.01"
-                      className="trading-input"
-                      placeholder="0.00"
-                      value={limitPrice}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setLimitPrice(value);
-                        if (value && !/^\d*(\.\d{0,2})?$/.test(value)) {
-                          setLimitPriceError("Price can have up to 2 decimal places only");
-                        } else {
-                          setLimitPriceError("");
-                        }
-                      }}
-                    />
-                    {limitPriceError && <p className="text-xs text-red-500">{limitPriceError}</p>}
-                  </div>
-                  <div>
-                    <label htmlFor="limit-amount-input" className="block text-xs font-medium text-gray-400 mb-1">
-                      Amount ({selectedPair.base})
-                    </label>
-                    <input
-                      id="limit-amount-input"
-                      type="number"
-                      step="0.000001"
-                      className="trading-input"
-                      placeholder="0.00"
-                      value={limitAmount}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setLimitAmount(value);
-                        if (value && !/^\d*(\.\d{0,6})?$/.test(value)) {
-                          setLimitAmountError("Amount can have up to 6 decimal places only");
-                        } else {
-                          setLimitAmountError("");
-                        }
-                      }}
-                    />
-                    {limitAmountError && <p className="text-xs text-red-500">{limitAmountError}</p>}
-                  </div>
-                </div>
-                <div className="text-xs text-gray-400">
-                  Estimated Total: <span className="text-white">
-                    {limitAmount && limitPrice ? (Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
-                  </span>
-                </div>
-                {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
+              <div className="text-xs text-gray-400">
+                Estimated Total: <span className="text-white">
+                  {limitAmount && limitPrice ? (Number.parseFloat(limitAmount) * Number.parseFloat(limitPrice)).toFixed(2) : "0.00"} {selectedPair.quote}
+                </span>
               </div>
-            )}
+              {balanceWarning && <p className="text-xs text-yellow-400">{balanceWarning}</p>}
+            </div>
 
             {isConnected ? (
               <>
