@@ -1,4 +1,4 @@
-# Rise Sepolia Onchain DEX Subgraph
+# Rise Sepolia DEX Subgraph
 
 This subgraph indexes events on the Rise Sepolia network.
 
