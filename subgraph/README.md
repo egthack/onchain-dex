@@ -9,3 +9,10 @@ yarn codegen
 yarn build
 goldsky subgraph deploy <subgraph-name>/<version> --path .
 ```
+
+## Local development
+
+```shell
+docker-compose up -d
+bash setup-local.sh
+```

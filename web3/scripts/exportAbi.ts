@@ -3,7 +3,7 @@ import path from "path";
 import { artifacts } from "hardhat";
 
 // 出力先ディレクトリ
-const JSON_ABI_DIR = path.join(__dirname, "../../subgraphRiseSepolia/1.0.0/abis");
+const JSON_ABI_DIR = path.join(__dirname, "../../subgraph/abis");
 
 // 出力したいコントラクトの一覧
 const contracts = [

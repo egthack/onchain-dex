@@ -22,10 +22,37 @@ echo "StartBlock: $START_BLOCK"
 
 # subgraph.local.ymlを生成
 cat subgraph.yml >subgraph.local.yml.tmp
-sed -i '' "s/0x66f037F629728d0cc721955805D345aC6D5c3b8b/$TRADING_VAULT_ADDRESS/g" subgraph.local.yml.tmp
-sed -i '' "s/0x9332713Fe3BBbC89A1C0B9E231D258901A98c258/$MATCHING_ENGINE_ADDRESS/g" subgraph.local.yml.tmp
-sed -i '' "s/5705570/$START_BLOCK/g" subgraph.local.yml.tmp
+sed -i '' "s/\${tradingVaultAddress}/$TRADING_VAULT_ADDRESS/g" subgraph.local.yml.tmp
+sed -i '' "s/\${matchingEngineAddress}/$MATCHING_ENGINE_ADDRESS/g" subgraph.local.yml.tmp
 sed -i '' "s/rise-sepolia/localhost/g" subgraph.local.yml.tmp
+sed -i '' "s/startBlock: [0-9]*/startBlock: $START_BLOCK/g" subgraph.local.yml.tmp
+
+# TradingVaultとMatchingEngineのアドレスを置換
+# 各データソースのアドレスを置換
+awk -v tv="$TRADING_VAULT_ADDRESS" -v me="$MATCHING_ENGINE_ADDRESS" '
+{
+  if ($0 ~ /name: TradingVault/ && !tv_found) {
+    tv_found = 1;
+    print $0;
+  } else if ($0 ~ /name: MatchingEngine/ && !me_found) {
+    me_found = 1;
+    print $0;
+  } else if (tv_found && $0 ~ /address:/ && !tv_replaced) {
+    tv_replaced = 1;
+    print "      address: \"" tv "\"";
+  } else if (me_found && $0 ~ /address:/ && !me_replaced) {
+    me_replaced = 1;
+    print "      address: \"" me "\"";
+  } else {
+    print $0;
+  }
+}' subgraph.local.yml.tmp >subgraph.local.yml.tmp2
+mv subgraph.local.yml.tmp2 subgraph.local.yml.tmp
+
+# デバッグ用に置換後の内容を表示
+echo "アドレスの置換結果を確認:"
+grep -A 3 "name: TradingVault" subgraph.local.yml.tmp
+grep -A 3 "name: MatchingEngine" subgraph.local.yml.tmp
 mv subgraph.local.yml.tmp subgraph.local.yml
 
 echo "subgraph.local.ymlを生成しました"
