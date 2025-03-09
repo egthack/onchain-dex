@@ -1,5 +1,5 @@
 {
-  "name": "subgraph/1.0.0",
+  "name": "subgraphRiseSepolia/1.0.0",
   "version": "1",
   "abis": {
     "TradingVault": [
