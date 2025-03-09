@@ -1,5 +1,5 @@
 specVersion: 0.0.4
-description: Rise Sepolia Onchain Dex
+description: Rise Sepolia DEX
 schema:
   file: ./schema.graphql
 dataSources:
@@ -7,7 +7,7 @@ dataSources:
     name: TradingVault
     network: rise-sepolia
     source:
-      address: '0x66f037F629728d0cc721955805D345aC6D5c3b8b'
+      address: "0x66f037F629728d0cc721955805D345aC6D5c3b8b"
       abi: TradingVault
       startBlock: 5705570
     mapping:
@@ -38,7 +38,7 @@ dataSources:
     name: MatchingEngine
     network: rise-sepolia
     source:
-      address: '0x9332713Fe3BBbC89A1C0B9E231D258901A98c258'
+      address: "0x9332713Fe3BBbC89A1C0B9E231D258901A98c258"
       abi: MatchingEngine
       startBlock: 5705570
     mapping:
