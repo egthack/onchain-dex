@@ -6,7 +6,9 @@
     "test": "hardhat test",
     "compile": "hardhat compile && ts-node scripts/exportAbi.ts",
     "clean": "hardhat clean",
-    "export-abi": "ts-node scripts/exportAbi.ts"
+    "export-abi": "ts-node scripts/exportAbi.ts",
+    "deploy-local": "npx hardhat run scripts/deployDemo.ts --network localhost",
+    "deploy-riseSepolia": "npx hardhat run scripts/deployDemo.ts --network riseSepolia"
   },
   "author": "",
   "license": "ISC",
