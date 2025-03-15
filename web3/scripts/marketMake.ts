@@ -97,17 +97,17 @@ async function main() {
     WETH: {
       symbol: "WETH",
       price: 3000 * 10 ** 2,
-      amount: 10000,
+      amount: 100000,
     },
     POL: {
       symbol: "POL",
       price: 5 * 10 ** 2,
-      amount: 10000,
+      amount: 100000,
     },
     TRUMP: {
       symbol: "TRUMP",
       price: 0.5 * 10 ** 2,
-      amount: 10000,
+      amount: 100000,
     },
   };
 
