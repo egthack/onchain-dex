@@ -57,6 +57,10 @@ mv subgraph.local.yml.tmp subgraph.local.yml
 
 echo "subgraph.local.ymlを生成しました"
 
+# Docker compose up -d を実行
+echo "Docker compose up -d を実行しています..."
+docker compose up -d
+
 # IPFSサービスが起動しているか確認
 echo "IPFSサービスの起動を確認しています..."
 MAX_RETRIES=30
