@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../../abi/ITradingVault.json";
 import ERC20ABI from "../../abi/IERC20.json";
-import env from "../../env.json";
 import Link from "next/link";
+import * as ethers from "ethers";
+import envConfig from "../../utils/envConfig";
 
 const TOKENS = ["USDC", "WETH", "WBTC", "POL"];
 
@@ -48,13 +49,13 @@ function convertToTokenUnits(amount: string, decimals: number): bigint {
 }
 
 const TOKEN_ADDRESSES = {
-  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
-  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
-  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
-  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
+  WETH: envConfig.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  USDC: envConfig.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WBTC: envConfig.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: envConfig.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
 };
 
-const VAULT_ADDRESS = env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress";
+const VAULT_ADDRESS = envConfig.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress";
 
 export default function DepositClient() {
   const { address, isConnected } = useAccount();
