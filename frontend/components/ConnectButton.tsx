@@ -3,31 +3,61 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { useEffect } from "react";
+import envConfig from "../utils/envConfig";
 
 export default function ConnectButton() {
   const { address, isConnected, chainId } = useAccount();
   const { connect } = useConnect();
   const { disconnect } = useDisconnect();
 
-  // RiseSepoliaのChain ID
-  const RISE_SEPOLIA_CHAIN_ID = Number(
-    process.env.NEXT_PUBLIC_RISE_SEPOLIA_CHAIN_ID
-  );
+  // 環境設定からChain IDを取得
+  const targetChainId = envConfig.NEXT_PUBLIC_CHAIN_ID;
 
   useEffect(() => {
-    // 接続済みかつ異なるネットワークの場合、RiseSepoliaに切り替えを要求
-    if (isConnected && chainId !== RISE_SEPOLIA_CHAIN_ID) {
+    // 接続済みかつ異なるネットワークの場合、適切なネットワークに切り替えを要求
+    if (isConnected && chainId !== targetChainId && window.ethereum) {
+      const hexChainId = `0x${targetChainId.toString(16)}`;
+      
       // MetaMaskにネットワーク切り替えを要求
       window.ethereum
-        ?.request({
+        .request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId: `0x${RISE_SEPOLIA_CHAIN_ID.toString(16)}` }],
+          params: [{ chainId: hexChainId }],
         })
-        .catch((error: Error) => {
-          console.error("Failed to switch network:", error.message);
+        .catch((switchError: any) => {
+          // ネットワークが存在しない場合（エラーコード 4902）、追加を試みる
+          if (switchError.code === 4902 || switchError.message.includes("Unrecognized chain ID")) {
+            // ローカルネットワークの場合、追加する
+            if (targetChainId === 31337) {
+              window.ethereum
+                .request({
+                  method: "wallet_addEthereumChain",
+                  params: [
+                    {
+                      chainId: hexChainId,
+                      chainName: "Localhost 8545",
+                      nativeCurrency: {
+                        name: "Ethereum",
+                        symbol: "ETH",
+                        decimals: 18,
+                      },
+                      rpcUrls: ["http://localhost:8545"],
+                      blockExplorerUrls: [],
+                    },
+                  ],
+                })
+                .catch((addError: Error) => {
+                  console.error("Failed to add network:", addError.message);
+                });
+            } else {
+              console.error("Failed to switch network:", switchError.message);
+            }
+          } else {
+            console.error("Failed to switch network:", switchError.message);
+          }
         });
     }
-  }, [isConnected, chainId, RISE_SEPOLIA_CHAIN_ID]);
+  }, [isConnected, chainId, targetChainId]);
 
   if (isConnected) {
     return (

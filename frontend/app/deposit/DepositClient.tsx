@@ -5,7 +5,6 @@ import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../../abi/ITradingVault.json";
 import ERC20ABI from "../../abi/IERC20.json";
 import Link from "next/link";
-import * as ethers from "ethers";
 import envConfig from "../../utils/envConfig";
 
 const TOKENS = ["USDC", "WETH", "WBTC", "POL"];
@@ -347,7 +346,7 @@ export default function DepositClient() {
           <div className="mb-4 text-white">
             Current deposit balance: {formatTokenUnits(depositBalance, getTokenDecimals(selectedToken))} {selectedToken}
           </div>
-          
+
           <div className="mb-3">
             <label htmlFor="withdraw-amount-input" className="block text-xs font-medium text-gray-400 mb-1">Withdraw Amount ({selectedToken})</label>
             <input

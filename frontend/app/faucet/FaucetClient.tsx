@@ -54,8 +54,12 @@ export default function FaucetClient() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const handleMint = async () => {
+    console.log("handleMint");
+    console.log("isConnected", isConnected);
+    console.log("walletClient", walletClient);
+    console.log("publicClient", publicClient);
     if (!isConnected || !walletClient || !publicClient) return;
-    setIsLoading(true);
+    console.log("FAUCET_ADDRESS", FAUCET_ADDRESS);
     try {
       const hash = await walletClient.writeContract({
         address: FAUCET_ADDRESS,

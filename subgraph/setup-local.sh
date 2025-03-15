@@ -1,6 +1,17 @@
 #!/bin/bash
 set -e
 
+# コマンドラインオプションの解析
+RESET=false
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --reset) RESET=true ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
 # 最新のデプロイメント情報を取得
 LATEST_DEPLOYMENT=$(find ../deployments/localhost -name "deployment-localhost-*.json" | sort -r | head -n 1)
 
@@ -59,6 +70,27 @@ echo "subgraph.local.ymlを生成しました"
 
 # Docker compose up -d を実行
 echo "Docker compose up -d を実行しています..."
+
+# データをリセットする場合
+if [ "$RESET" = true ]; then
+    echo "サブグラフのデータをリセットしています..."
+    
+    # 既存のコンテナを停止して削除
+    docker compose down -v
+    
+    # Dockerボリュームを削除
+    docker volume rm subgraph_postgres-data || true
+    docker volume rm subgraph_ipfs-data || true
+    
+    # dataディレクトリの中身を削除
+    if [ -d "./data" ]; then
+        echo "dataディレクトリの中身を削除しています..."
+        rm -rf ./data/*
+    fi
+    
+    echo "サブグラフのデータをリセットしました"
+fi
+
 docker compose up -d
 
 # IPFSサービスが起動しているか確認
@@ -82,6 +114,27 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     exit 1
 fi
 
+# Graph Nodeが起動しているか確認
+echo "Graph Nodeの起動を確認しています..."
+MAX_RETRIES=30
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    if curl -s http://localhost:8020/ >/dev/null; then
+        echo "Graph Nodeが起動しています"
+        break
+    fi
+    echo "Graph Nodeの起動を待っています... ($RETRY_COUNT/$MAX_RETRIES)"
+    sleep 2
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    echo "エラー: Graph Nodeが起動していません"
+    echo "docker-compose up -d を実行して、サービスが起動するのを待ってから再試行してください"
+    exit 1
+fi
+
 # サブグラフのコードを生成
 echo "サブグラフのコードを生成しています..."
 graph codegen subgraph.local.yml
@@ -90,9 +143,16 @@ graph codegen subgraph.local.yml
 echo "サブグラフをビルドしています..."
 graph build subgraph.local.yml
 
+# 既存のサブグラフを削除（エラーは無視）
+echo "既存のサブグラフを削除しています..."
+graph remove --node http://localhost:8020/ clob-dex/local 2>/dev/null || true
+
 # サブグラフを作成
 echo "サブグラフを作成しています..."
-graph create --node http://localhost:8020/ clob-dex/local || true
+graph create --node http://localhost:8020/ clob-dex/local
+
+# 少し待機してサブグラフの作成が完了するのを待つ
+sleep 3
 
 # サブグラフをデプロイ
 echo "サブグラフをデプロイしています..."
@@ -100,3 +160,8 @@ graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 clob-dex
 
 echo "セットアップが完了しました"
 echo "GraphQLエンドポイント: http://localhost:8000/subgraphs/name/clob-dex/local"
+echo ""
+echo "使用方法:"
+echo "  --reset  サブグラフのデータをリセットします"
+echo ""
+echo "例: ./setup-local.sh --reset"
