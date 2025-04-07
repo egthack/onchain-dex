@@ -1,0 +1,26 @@
+{
+  "name": "rise-sepolia-dex-subgraph",
+  "version": "1.0.0",
+  "repository": "https://github.com/egthack/onchain-dex",
+  "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy": "goldsky subgraph deploy subgraphRiseSepolia/1.0.0 --path .",
+    "create-local": "graph create --node http://localhost:8020/ clob-dex/local",
+    "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 clob-dex/local --version-label 1.0.0",
+    "remove-local": "graph remove --node http://localhost:8020/ clob-dex/local",
+    "start-local": "docker-compose up -d",
+    "stop-local": "docker-compose down",
+    "setup-local": "bash setup-local.sh"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "0.51.0",
+    "@graphprotocol/graph-ts": "0.31.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^18.19.80",
+    "js-yaml": "^4.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.4"
+  }
+}

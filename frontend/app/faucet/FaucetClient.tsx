@@ -3,7 +3,8 @@
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { useState } from "react";
 import FaucetAbi from "../../abi/IMultiTokenFaucet.json";
-import env from "../../env.json";
+import * as ethers from "ethers";
+import envConfig from "../../utils/envConfig";
 
 const SUPPORTED_TOKENS = [
   {
@@ -32,12 +33,12 @@ const SUPPORTED_TOKENS = [
   }
 ];
 
-const FAUCET_ADDRESS = (env.NEXT_PUBLIC_FAUCET_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
+const FAUCET_ADDRESS = (envConfig.NEXT_PUBLIC_FAUCET_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 const TOKEN_ADDRESSES = {
-  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
-  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
-  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
-  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
+  USDC: envConfig.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WETH: envConfig.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  WBTC: envConfig.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: envConfig.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
 };
 
 const faucetAbi = FaucetAbi.abi;
@@ -53,8 +54,12 @@ export default function FaucetClient() {
   const [modalOpen, setModalOpen] = useState(false);
 
   const handleMint = async () => {
+    console.log("handleMint");
+    console.log("isConnected", isConnected);
+    console.log("walletClient", walletClient);
+    console.log("publicClient", publicClient);
     if (!isConnected || !walletClient || !publicClient) return;
-    setIsLoading(true);
+    console.log("FAUCET_ADDRESS", FAUCET_ADDRESS);
     try {
       const hash = await walletClient.writeContract({
         address: FAUCET_ADDRESS,

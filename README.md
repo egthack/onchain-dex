@@ -128,7 +128,7 @@ npx hardhat run scripts/exportAbi.ts --network riseSepolia
 # 2. Navigate to subgraph directory
 cd ../subgraphRiseSepolia/1.0.0
 
-# 3. Update subgraph.yaml with your contract addresses(See the file under ../../deployments/riseSepolia/)
+# 3. Update subgraph.yml with your contract addresses(See the file under ../../deployments/riseSepolia/)
 
 # 4. Build subgraph
 npm run codegen

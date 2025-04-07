@@ -5,7 +5,28 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import type { Chain } from "viem";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { injected } from "wagmi/connectors";
+import envConfig from "../utils/envConfig";
 
+// ローカル環境用のHardhatネットワーク設定
+const localhost = {
+  id: 31337,
+  name: "Localhost",
+  nativeCurrency: {
+    decimals: 18,
+    name: "Ethereum",
+    symbol: "ETH",
+  },
+  rpcUrls: {
+    default: {
+      http: ["http://localhost:8545"],
+    },
+    public: {
+      http: ["http://localhost:8545"],
+    },
+  },
+} as const satisfies Chain;
+
+// Rise Sepoliaネットワーク設定
 const riseSepolia = {
   id: Number(process.env.NEXT_PUBLIC_RISE_SEPOLIA_CHAIN_ID),
   name: "Rise Sepolia",
@@ -36,12 +57,15 @@ const riseSepolia = {
     : undefined,
 } as const satisfies Chain;
 
+const activeChain = envConfig.NETWORK === 'localhost' ? localhost : riseSepolia;
+console.log(`[PROVIDERS] Active network: ${envConfig.NETWORK}, Chain ID: ${activeChain.id}`);
+
 const config = createConfig({
-  chains: [riseSepolia],
+  chains: [activeChain],
   connectors: [injected()],
   transports: {
-    [riseSepolia.id]: http(
-      process.env.NEXT_PUBLIC_RISE_SEPOLIA_RPC_URL ?? "http://localhost:8545"
+    [activeChain.id]: http(
+      activeChain.rpcUrls.default.http[0]
     ),
   },
 });

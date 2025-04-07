@@ -92,22 +92,22 @@ async function main() {
     WBTC: {
       symbol: "WBTC",
       price: 30000 * 10 ** 2, // 30000 USD
-      amount: 100, // 0.0001 WBTC
+      amount: 10000, // 0.01 WBTC
     },
     WETH: {
       symbol: "WETH",
       price: 3000 * 10 ** 2,
-      amount: 100,
+      amount: 100000,
     },
     POL: {
       symbol: "POL",
       price: 5 * 10 ** 2,
-      amount: 100,
+      amount: 100000,
     },
     TRUMP: {
       symbol: "TRUMP",
       price: 0.5 * 10 ** 2,
-      amount: 100,
+      amount: 100000,
     },
   };
 
@@ -170,7 +170,9 @@ async function main() {
     let currentPrice: number;
     if (bestBuyPrice > 0n && bestSellPrice > 0n) {
       // 注文がある場合は平均を現在価格とする
-      console.log(`use average of best buy price and best sell price as current price: ${bestBuyPrice}, ${bestSellPrice}`);
+      console.log(
+        `use average of best buy price and best sell price as current price: ${bestBuyPrice}, ${bestSellPrice}`
+      );
       currentPrice = Math.floor(
         (Number(bestBuyPrice) + Number(bestSellPrice)) / 2
       );
@@ -184,7 +186,7 @@ async function main() {
       currentPrice = Number(bestSellPrice);
     } else {
       console.log(`use default price: ${token.price}`);
-      currentPrice = token.price; 
+      currentPrice = token.price;
     }
 
     console.log(`Current price: ${currentPrice}`);

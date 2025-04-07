@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import TradingVaultABI from "../abi/ITradingVault.json";
 import * as ethers from "ethers";
-import env from "../env.json";
+import envConfig from "../utils/envConfig";
+
 import Script from "next/script";
 import Link from "next/link";
 
@@ -26,10 +27,10 @@ const TRADING_PAIRS = [
 ];
 
 const TOKEN_ADDRESSES = {
-  WETH: env.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
-  USDC: env.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
-  WBTC: env.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
-  POL: env.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
+  WETH: envConfig.NEXT_PUBLIC_WETH_ADDRESS || "0xWETH",
+  USDC: envConfig.NEXT_PUBLIC_USDC_ADDRESS || "0xUSDC",
+  WBTC: envConfig.NEXT_PUBLIC_WBTC_ADDRESS || "0xWBTC",
+  POL: envConfig.NEXT_PUBLIC_POL_ADDRESS || "0xPOL"
 };
 
 // トークンごとのデシマル値を定義
@@ -40,7 +41,7 @@ const TOKEN_DECIMALS = {
   POL: 18
 };
 
-const VAULT_ADDRESS = (env.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
+const VAULT_ADDRESS = (envConfig.NEXT_PUBLIC_VAULT_ADDRESS || "0xYourTradingVaultAddress") as unknown as `0x${string}`;
 
 const vaultAbi = TradingVaultABI.abi;
 
@@ -190,7 +191,7 @@ export default function TradingPage() {
   useEffect(() => {
     async function fetchBuyOrderBook() {
       try {
-        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+        const response = await fetch(envConfig.NEXT_PUBLIC_SUBGRAPH_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -240,7 +241,7 @@ export default function TradingPage() {
   useEffect(() => {
     async function fetchSellOrderBook() {
       try {
-        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+        const response = await fetch(envConfig.NEXT_PUBLIC_SUBGRAPH_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -290,7 +291,7 @@ export default function TradingPage() {
   useEffect(() => {
     async function fetchLastFilledOrder() {
       try {
-        const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+        const response = await fetch(envConfig.NEXT_PUBLIC_SUBGRAPH_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -556,7 +557,7 @@ export default function TradingPage() {
           }
         }
       `;
-      const response = await fetch(env.NEXT_PUBLIC_SUBGRAPH_URL, {
+      const response = await fetch(envConfig.NEXT_PUBLIC_SUBGRAPH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query })

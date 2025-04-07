@@ -185,21 +185,10 @@ const main = async () => {
   );
   console.log(`Deployment addresses saved to: ${filename}`);
 
-  // 追加：frontend/env.json に最新の契約アドレス情報を書き込み
-  const envData = {
-    NEXT_PUBLIC_ENABLE_TESTNETS: "true",
-    NEXT_PUBLIC_MATCHING_ENGINE_ADDRESS:
-      deployedAddresses.contracts.trading.matchingEngine,
-    NEXT_PUBLIC_VAULT_ADDRESS: deployedAddresses.contracts.trading.tradingVault,
-    NEXT_PUBLIC_FAUCET_ADDRESS: deployedAddresses.contracts.faucet,
-    NEXT_PUBLIC_WBTC_ADDRESS: deployedAddresses.contracts.tokens.WBTC,
-    NEXT_PUBLIC_WETH_ADDRESS: deployedAddresses.contracts.tokens.WETH,
-    NEXT_PUBLIC_POL_ADDRESS: deployedAddresses.contracts.tokens.POL,
-    NEXT_PUBLIC_TRUMP_ADDRESS: deployedAddresses.contracts.tokens.TRUMP,
-    NEXT_PUBLIC_USDC_ADDRESS: deployedAddresses.contracts.tokens.USDC,
-  };
-
-  const frontendEnvPath = path.join(__dirname, "../../frontend/env.json");
+  const frontendEnvPath = path.join(
+    __dirname,
+    `../../frontend/env.${hre.network.name}.json`
+  );
   let existingEnv = {};
   if (fs.existsSync(frontendEnvPath)) {
     existingEnv = JSON.parse(fs.readFileSync(frontendEnvPath, "utf8"));
